@@ -52,23 +52,25 @@ func printTrack(t TrackInfo) {
 	if t.NowPlaying == "true" {
 		dateSuffix = "(current)"
 	} else {
-		epoch, err := strconv.Atoi(t.Date.Uts)
+		epoch, err := getParsedUTS(t)
 		if err != nil {
 			dateSuffix = "[ERR]"
 		} else {
-			t := time.Unix(int64(epoch), 0)
-			dateSuffix = fmt.Sprintf("[%d] %v", epoch, t)
+			dateSuffix = fmt.Sprintf("[%d]", epoch)
 		}
 	}
 	fmt.Printf("%s - %s %s\n", t.Name, t.Artist.Name, dateSuffix)
 }
 
 type traversalState struct {
-	User        string
+	User string
+
 	Page        int
 	TotalPages  int
 	TotalTracks int
-	Anchor      int64
+
+	From int64
+	To   int64 // nee Anchor
 }
 
 // get the next page of responses, given a previous state
@@ -79,33 +81,36 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 
 	// this lastfm.P thing doesn't seem very typesafe?
 	params := lastfm.P{
-		"user": "grgbrn",
+		"user":  "grgbrn",
+		"limit": 10, // XXX only for debugging
 	}
-	// only need to pass the to (anchor) and page params from currentState
-	if current.Anchor != 0 {
-		params["to"] = current.Anchor
+	// need to pass to, from, page params from current state
+	if current.To != 0 {
+		params["to"] = current.To
+	}
+	if current.From != 0 {
+		params["from"] = current.From
 	}
 	if current.Page != 0 {
 		params["page"] = current.Page
 	}
-	// fmt.Printf("%+V\n", current)
-	// panic("go no further!")
+	fmt.Printf("== calling GetRecentTracks %+v\n", params)
 
 	recentTracks, err := api.User.GetRecentTracks(params)
 
 	if err != nil {
-		fmt.Println("error making getRecentTracks request")
 		return nextState, tracks, err
 	}
 	fmt.Printf("got page %d/%d\n", recentTracks.Page, recentTracks.TotalPages)
 
 	// preserve user & anchor, update the rest from the response
 	nextState.User = current.User
-	nextState.Page = recentTracks.Page
+	nextState.Page = recentTracks.Page + 1
 	nextState.TotalPages = recentTracks.TotalPages
 	nextState.TotalTracks = recentTracks.Total
-	if current.Anchor != 0 {
-		nextState.Anchor = current.Anchor
+	nextState.From = current.From
+	if current.To != 0 {
+		nextState.To = current.To
 	} else {
 		// must be initial call, so have to find the anchor
 
@@ -119,7 +124,7 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 				maxUTS = tmp
 			}
 		}
-		nextState.Anchor = maxUTS
+		nextState.To = maxUTS
 	}
 
 	// can't return recentTracks.Tracks as a []TrackInfo for some reason
@@ -141,28 +146,45 @@ func main() {
 
 	api = lastfm.New(APIKey, APISecret)
 
-	// XXX figure out where to get initial state from... if there's a checkpoint
-	// file that needs to be reloaded, otherwise find the max id from the database?
-	// and if there's no database just create a blank with only the user set?
-	initialState := traversalState{
+	/*
+		three choices for start state:
+
+		- new database, so everything must be dl'd
+		  to: max(uts) from first server response
+		  from: nil
+
+		- incremental update (most common case)
+		  to: max(uts) from first server response
+		  from: max(uts) from local database
+
+		- recover from a checkpoint file
+		  all values come from the checkpoint
+
+	*/
+	state := traversalState{
 		User: "grgbrn",
-		//Anchor: 1555586216,
+		//From: 1555427528,
+	}
+	fmt.Printf("initial state: %+v\n", state)
+
+	// simple test to just make 3 repeated calls
+	c := 0
+	for c < 3 {
+		newState, tracks, err := getNextTracks(state)
+		c++
+		if err != nil {
+			panic("error on API call")
+		}
+
+		fmt.Printf("* new state: %+v\n", newState)
+		fmt.Printf("* got %d tracks\n", len(tracks))
+		state = newState
+
+		for _, t := range tracks {
+			printTrack(t)
+		}
+
+		time.Sleep(2 * time.Second)
 	}
 
-	// XXX while what? how do i determine when i'm done? no new tracks returned?
-	// can the struct itself tell me? Page == TotalPages? would only work for the first
-
-	fmt.Printf("initial state: %+v\n", initialState)
-
-	newState, tracks, err := getNextTracks(initialState)
-	if err != nil {
-		panic("error on first call")
-	}
-
-	fmt.Printf("got %d tracks\n", len(tracks))
-	fmt.Printf("state after initial call: %+v\n", newState)
-
-	for _, t := range tracks {
-		printTrack(t)
-	}
 }
