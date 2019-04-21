@@ -73,10 +73,29 @@ type traversalState struct {
 	To   int64 // nee Anchor
 }
 
+// processResponse finds the max uts in a response, filters out the "now playing"
+// track (if any) and coerces remote API responses into local TrackInfo interface
+func processResponse(recentTracks lastfm.UserGetRecentTracks) (int64, []TrackInfo) {
+	var maxUTS int64
+	tracks := make([]TrackInfo, 0)
+
+	for _, track := range recentTracks.Tracks {
+		if track.NowPlaying != "true" {
+			tmp, _ := getParsedUTS(track)
+			if tmp > maxUTS {
+				maxUTS = tmp
+			}
+			tracks = append(tracks, track)
+		}
+	}
+
+	return maxUTS, tracks
+}
+
 // get the next page of responses, given a previous state
 func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) {
 
-	tracks := make([]TrackInfo, 0)
+	tracks := make([]TrackInfo, 0) // XXX any other way to define this without make()???
 	nextState := traversalState{}
 
 	// this lastfm.P thing doesn't seem very typesafe?
@@ -103,6 +122,8 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 	}
 	fmt.Printf("got page %d/%d\n", recentTracks.Page, recentTracks.TotalPages)
 
+	maxUTS, tracks := processResponse(recentTracks)
+
 	// preserve user & anchor, update the rest from the response
 	nextState.User = current.User
 	nextState.Page = recentTracks.Page + 1
@@ -112,25 +133,8 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 	if current.To != 0 {
 		nextState.To = current.To
 	} else {
-		// must be initial call, so have to find the anchor
-
-		// XXX how to handle an unparseable uts?
-		// XXX and can we assume that it's always going to be the first not-playing element?
-		// XXX may need to skip currently playing track too
-		var maxUTS int64
-		for _, track := range recentTracks.Tracks {
-			tmp, _ := getParsedUTS(track)
-			if tmp > maxUTS {
-				maxUTS = tmp
-			}
-		}
+		// must be initial call, so need to use the maxUTS from the response
 		nextState.To = maxUTS
-	}
-
-	// can't return recentTracks.Tracks as a []TrackInfo for some reason
-	// but building up another identical list seems to work
-	for _, track := range recentTracks.Tracks {
-		tracks = append(tracks, track)
 	}
 
 	return nextState, tracks, nil
