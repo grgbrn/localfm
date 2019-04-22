@@ -1,13 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/shkh/lastfm-go/lastfm"
 )
+
+const checkpointFilename string = "checkpoint.json"
 
 // module globals
 var api *lastfm.Api
@@ -56,7 +60,8 @@ func printTrack(t TrackInfo) {
 		if err != nil {
 			dateSuffix = "[ERR]"
 		} else {
-			dateSuffix = fmt.Sprintf("[%d]", epoch)
+			// tmp := time.Unix(epoch, 0)
+			dateSuffix = fmt.Sprintf("[%d] %s", epoch, t.Date.Date)
 		}
 	}
 	fmt.Printf("%s - %s %s\n", t.Name, t.Artist.Name, dateSuffix)
@@ -71,6 +76,10 @@ type traversalState struct {
 
 	From int64
 	To   int64 // nee Anchor
+}
+
+func (ts traversalState) isComplete() bool {
+	return ts.TotalPages > 0 && ts.Page == ts.TotalPages
 }
 
 // processResponse finds the max uts in a response, filters out the "now playing"
@@ -94,6 +103,10 @@ func processResponse(recentTracks lastfm.UserGetRecentTracks) (int64, []TrackInf
 
 // get the next page of responses, given a previous state
 func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) {
+
+	if current.isComplete() {
+		panic("getNextTracks called on a completed state")
+	}
 
 	tracks := make([]TrackInfo, 0) // XXX any other way to define this without make()???
 	nextState := traversalState{}
@@ -140,6 +153,38 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 	return nextState, tracks, nil
 }
 
+func writeCheckpoint(path string, state traversalState) error {
+	jout, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(path, jout, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func checkpointExists() bool {
+	_, err := os.Stat(checkpointFilename)
+	return !os.IsNotExist(err)
+}
+
+func resumeCheckpoint() (traversalState, error) {
+	newState := traversalState{}
+
+	dat, err := ioutil.ReadFile(checkpointFilename)
+	if err != nil {
+		return newState, err
+	}
+
+	if err := json.Unmarshal(dat, &newState); err != nil {
+		return newState, err
+	}
+	return newState, nil
+}
+
 func main() {
 	APIKey := os.Getenv("LASTFM_API_KEY")
 	APISecret := os.Getenv("LASTFM_API_SECRET")
@@ -165,22 +210,33 @@ func main() {
 		  all values come from the checkpoint
 
 	*/
-	state := traversalState{
-		User: "grgbrn",
-		//From: 1555427528,
+	var err error
+	var state traversalState
+
+	if checkpointExists() {
+		fmt.Println("resuming from checkpoint file")
+		state, err = resumeCheckpoint()
+		if err != nil {
+			panic("error resuming checkpoint")
+		}
+	} else {
+		state = traversalState{
+			User: "grgbrn",
+		}
 	}
 	fmt.Printf("initial state: %+v\n", state)
 
-	// simple test to just make 3 repeated calls
-	c := 0
-	for c < 3 {
+	// requestLimit := 5
+	requestCount := 0
+
+	for !state.isComplete() {
 		newState, tracks, err := getNextTracks(state)
-		c++
+		requestCount++
+
 		if err != nil {
 			panic("error on API call")
 		}
 
-		fmt.Printf("* new state: %+v\n", newState)
 		fmt.Printf("* got %d tracks\n", len(tracks))
 		state = newState
 
@@ -188,7 +244,16 @@ func main() {
 			printTrack(t)
 		}
 
+		fmt.Printf("* new state: %+v\n", newState)
+		writeCheckpoint(checkpointFilename, newState)
+
 		time.Sleep(2 * time.Second)
 	}
-
+	// completed! so we can remove the checkpoint file
+	// XXX also print some stats here
+	err = os.Remove(checkpointFilename)
+	if err != nil {
+		fmt.Println("error removing checkpoint file. manually clean this up before next run")
+		// XXX return an error code here
+	}
 }
