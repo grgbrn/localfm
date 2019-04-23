@@ -238,8 +238,11 @@ func main() {
 	// XXX check database for incremental update
 	fmt.Printf("initial state: %+v\n", state)
 
-	requestLimit := 3
+	requestLimit := 8 // XXX set this from a param
 	requestCount := 0
+
+	errCount := 0 // number of successive errors
+	maxRetries := 3
 
 	done := false
 
@@ -248,8 +251,21 @@ func main() {
 		requestCount++
 
 		if err != nil {
-			// XXX some kind of exponential backoff and continue
-			panic("error on API call")
+			errCount++
+			fmt.Println("Error on api call:")
+			fmt.Println(err)
+
+			if errCount > maxRetries {
+				fmt.Println("Giving up after max retries")
+				break
+			} else {
+				backoff := Pow(2, errCount+1)
+				fmt.Printf("Retrying in %d seconds\n", backoff)
+				time.Sleep(time.Duration(backoff) * time.Second)
+				continue
+			}
+		} else {
+			errCount = 0
 		}
 
 		fmt.Printf("* got %d tracks\n", len(tracks))
@@ -289,4 +305,18 @@ func main() {
 	} else {
 		fmt.Println("incomplete run for some reason! probably need to continue from checkpoint")
 	}
+}
+
+// Pow does simple integer exponentiation
+// "a**b" in some other languages
+func Pow(a, b int) int {
+	p := 1
+	for b > 0 {
+		if b&1 != 0 {
+			p *= a
+		}
+		b >>= 1
+		a *= a
+	}
+	return p
 }
