@@ -12,9 +12,11 @@ import (
 )
 
 const checkpointFilename string = "checkpoint.json"
+const apiThrottleSecs int64 = 2
 
 // module globals
 var api *lastfm.Api
+var throttle <-chan time.Time
 
 // lastfm lib doesn't define useful sub-structs for it's
 // result types, so do it myself...
@@ -101,6 +103,10 @@ func processResponse(recentTracks lastfm.UserGetRecentTracks) (int64, []TrackInf
 	return maxUTS, tracks
 }
 
+func ts(t time.Time) string {
+	return t.Format("15:04:05.00000")
+}
+
 // get the next page of responses, given a previous state
 func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) {
 
@@ -126,8 +132,11 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 	if current.Page != 0 {
 		params["page"] = current.Page
 	}
-	fmt.Printf("== calling GetRecentTracks %+v\n", params)
 
+	// blocking read from rate-limit channel
+	<-throttle
+	fmt.Printf("== calling GetRecentTracks %+v\n", params)
+	fmt.Printf("== [%s]\n", time.Now())
 	recentTracks, err := api.User.GetRecentTracks(params)
 
 	if err != nil {
@@ -194,6 +203,7 @@ func main() {
 	}
 
 	api = lastfm.New(APIKey, APISecret)
+	throttle = time.Tick(time.Duration(apiThrottleSecs) * time.Second)
 
 	/*
 		three choices for start state:
@@ -224,36 +234,58 @@ func main() {
 			User: "grgbrn",
 		}
 	}
+	// XXX check database for incremental update
 	fmt.Printf("initial state: %+v\n", state)
 
-	// requestLimit := 5
+	requestLimit := 3
 	requestCount := 0
 
-	for !state.isComplete() {
+	done := false
+
+	for !done {
 		newState, tracks, err := getNextTracks(state)
 		requestCount++
 
 		if err != nil {
+			// XXX some kind of exponential backoff and continue
 			panic("error on API call")
 		}
 
 		fmt.Printf("* got %d tracks\n", len(tracks))
-		state = newState
 
 		for _, t := range tracks {
 			printTrack(t)
 		}
+		// xxx break if there's an error processing the items
 
+		// write checkpoint and update state only if there
+		// were no errors processing the items
 		fmt.Printf("* new state: %+v\n", newState)
-		writeCheckpoint(checkpointFilename, newState)
+		if !newState.isComplete() {
+			writeCheckpoint(checkpointFilename, newState)
+			state = newState
+		} else {
+			// does this mean no more calls, or is stopping here and off-by-one?
+			done = true
+		}
 
-		time.Sleep(2 * time.Second)
+		// only break from request limit after the checkpoint has
+		// been written so it's safe to resume
+		if requestCount >= requestLimit {
+			fmt.Println("request limit exceeded, exiting!")
+			break
+		}
 	}
+
 	// completed! so we can remove the checkpoint file
 	// XXX also print some stats here
-	err = os.Remove(checkpointFilename)
-	if err != nil {
-		fmt.Println("error removing checkpoint file. manually clean this up before next run")
-		// XXX return an error code here
+	if done {
+		err = os.Remove(checkpointFilename)
+		if err != nil {
+			fmt.Println("error removing checkpoint file. manually clean this up before next run")
+			// XXX return an error code here
+		}
+	} else {
+		fmt.Println("incomplete run for some reason! probably need to continue from checkpoint")
 	}
 }
