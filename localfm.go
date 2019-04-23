@@ -1,11 +1,13 @@
 package localfm
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/shkh/lastfm-go/lastfm"
@@ -17,6 +19,7 @@ const apiThrottleSecs int64 = 2
 // module globals
 var api *lastfm.Api
 var throttle <-chan time.Time
+var db *sql.DB
 
 // lastfm lib doesn't define useful sub-structs for it's
 // result types, so do it myself...
@@ -51,6 +54,16 @@ func getParsedUTS(ti TrackInfo) (int64, error) {
 		return 0, err
 	}
 	return int64(epoch), nil
+}
+
+// getParsedTime returns a time.Time object in UTC
+func getParsedTime(ti TrackInfo) (time.Time, error) {
+	var t time.Time
+	uts, err := getParsedUTS(ti)
+	if err != nil {
+		return t, err
+	}
+	return time.Unix(uts, 0).UTC(), nil
 }
 
 func printTrack(t TrackInfo) {
@@ -103,10 +116,6 @@ func processResponse(recentTracks lastfm.UserGetRecentTracks) (int64, []TrackInf
 	return maxUTS, tracks
 }
 
-func ts(t time.Time) string {
-	return t.Format("15:04:05.00000")
-}
-
 // get the next page of responses, given a previous state
 func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) {
 
@@ -119,8 +128,8 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 
 	// this lastfm.P thing doesn't seem very typesafe?
 	params := lastfm.P{
-		"user":  "grgbrn",
-		"limit": 10, // XXX only for debugging
+		"user": "grgbrn",
+		//"limit": 10, // XXX only for debugging
 	}
 	// need to pass to, from, page params from current state
 	if current.To != 0 {
@@ -196,6 +205,29 @@ func resumeCheckpoint() (traversalState, error) {
 }
 
 func Main() {
+	//
+	// initialize database
+	//
+	DSN := os.Getenv("DSN")
+	if DSN == "" {
+		panic("Must set DSN environment var")
+	}
+	// mimic DSN format from earlier python version of this tool
+	// "sqlite:///foo.db"
+	if !strings.HasPrefix(DSN, "sqlite://") {
+		panic("DSN var must be of the format 'sqlite:///foo.db'")
+	}
+	dbPath := DSN[9:]
+	db = InitDB(dbPath)
+
+	fmt.Println("initialized database:")
+	fmt.Println(db)
+
+	// XXX assert that database actually exists
+
+	//
+	// initialize lastfm api client
+	//
 	APIKey := os.Getenv("LASTFM_API_KEY")
 	APISecret := os.Getenv("LASTFM_API_SECRET")
 
@@ -235,10 +267,10 @@ func Main() {
 			User: "grgbrn",
 		}
 	}
-	// XXX check database for incremental update
+	// XXX check database for id for incremental update
 	fmt.Printf("initial state: %+v\n", state)
 
-	requestLimit := 8 // XXX set this from a param
+	requestLimit := 3 // XXX set this from a param
 	requestCount := 0
 
 	errCount := 0 // number of successive errors
@@ -268,12 +300,14 @@ func Main() {
 			errCount = 0
 		}
 
+		// XXX review error handling here
 		fmt.Printf("* got %d tracks\n", len(tracks))
-
-		for _, t := range tracks {
-			printTrack(t)
+		err = saveTracks(db, tracks)
+		if err != nil {
+			fmt.Println("error saving tracks!")
+			fmt.Println(err)
+			break
 		}
-		// xxx break if there's an error processing the items
 
 		// write checkpoint and update state only if there
 		// were no errors processing the items
@@ -305,4 +339,36 @@ func Main() {
 	} else {
 		fmt.Println("incomplete run for some reason! probably need to continue from checkpoint")
 	}
+}
+
+// convertItem prepares an api response to be inserted into the database
+func convertItem(ti TrackInfo) (LastFMActivity, error) {
+	var act LastFMActivity
+
+	dt, err := getParsedTime(ti)
+	if err != nil {
+		return act, err
+
+	}
+	act.Title = ti.Name
+	act.Artist = ti.Artist.Name
+	act.Album = ti.Album.Name
+	act.Dt = dt
+	return act, nil
+}
+
+func saveTracks(db *sql.DB, tracks []TrackInfo) error {
+
+	var activity []LastFMActivity
+
+	for _, track := range tracks {
+		printTrack(track)
+		a, err := convertItem(track)
+		if err != nil {
+			return err
+		}
+		activity = append(activity, a)
+	}
+
+	return StoreActivity(db, activity)
 }
