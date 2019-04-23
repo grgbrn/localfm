@@ -1,4 +1,4 @@
-package main
+package localfm
 
 import (
 	"encoding/json"
@@ -195,7 +195,7 @@ func resumeCheckpoint() (traversalState, error) {
 	return newState, nil
 }
 
-func main() {
+func Main() {
 	APIKey := os.Getenv("LASTFM_API_KEY")
 	APISecret := os.Getenv("LASTFM_API_SECRET")
 
@@ -305,18 +305,4 @@ func main() {
 	} else {
 		fmt.Println("incomplete run for some reason! probably need to continue from checkpoint")
 	}
-}
-
-// Pow does simple integer exponentiation
-// "a**b" in some other languages
-func Pow(a, b int) int {
-	p := 1
-	for b > 0 {
-		if b&1 != 0 {
-			p *= a
-		}
-		b >>= 1
-		a *= a
-	}
-	return p
 }
