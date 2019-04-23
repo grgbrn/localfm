@@ -112,19 +112,31 @@ func StoreActivity(db *sql.DB, rows []LastFMActivity) error {
 	) values (CURRENT_TIMESTAMP, ?, ?, ?, ?)
 	`
 
-	stmt, err := db.Prepare(additem)
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare(additem)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
+	var insertErr error
 	for _, r := range rows {
-		_, err = stmt.Exec(r.Artist, r.Album, r.Title, r.Dt)
-		if err != nil {
-			return err
+		_, insertErr = stmt.Exec(r.Artist, r.Album, r.Title, r.Dt)
+		if insertErr != nil {
+			break
 		}
 	}
-	return nil
+	if insertErr != nil {
+		tx.Rollback()
+		return insertErr
+	} else {
+		tx.Commit()
+		return nil
+	}
 }
 
 /*

@@ -270,7 +270,7 @@ func Main() {
 	// XXX check database for id for incremental update
 	fmt.Printf("initial state: %+v\n", state)
 
-	requestLimit := 3 // XXX set this from a param
+	requestLimit := 10 // XXX set this from a param
 	requestCount := 0
 
 	errCount := 0 // number of successive errors
