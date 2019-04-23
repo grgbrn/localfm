@@ -155,8 +155,9 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 	if current.To != 0 {
 		nextState.To = current.To
 	} else {
-		// must be initial call, so need to use the maxUTS from the response
-		nextState.To = maxUTS
+		// must be initial call, so need to find maxUTS from the response
+		// use 1 greater than the maxUTS or the first track will be excluded
+		nextState.To = maxUTS + 1
 	}
 
 	return nextState, tracks, nil
