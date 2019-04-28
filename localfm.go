@@ -14,7 +14,6 @@ import (
 )
 
 const checkpointFilename string = "checkpoint.json"
-const apiThrottleSecs int64 = 2
 
 // module globals
 var api *lastfm.Api
@@ -129,7 +128,6 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 	// this lastfm.P thing doesn't seem very typesafe?
 	params := lastfm.P{
 		"user": "grgbrn",
-		//"limit": 10, // XXX only for debugging
 	}
 	// need to pass to, from, page params from current state
 	if current.To != 0 {
@@ -204,7 +202,7 @@ func resumeCheckpoint() (traversalState, error) {
 	return newState, nil
 }
 
-func Main() {
+func Main(apiThrottleDelay int, requestLimit int, recover bool) {
 	var err error
 
 	//
@@ -233,13 +231,14 @@ func Main() {
 	//
 	APIKey := os.Getenv("LASTFM_API_KEY")
 	APISecret := os.Getenv("LASTFM_API_SECRET")
+	Username := os.Getenv("LASTFM_USERNAME")
 
-	if APIKey == "" || APISecret == "" {
-		panic("Must set LASTFM_API_KEY and LASTFM_API_SECRET environment vars")
+	if APIKey == "" || APISecret == "" || Username == "" {
+		panic("Must set LASTFM_USERNAME, LASTFM_API_KEY and LASTFM_API_SECRET environment vars")
 	}
 
 	api = lastfm.New(APIKey, APISecret)
-	throttle = time.Tick(time.Duration(apiThrottleSecs) * time.Second)
+	throttle = time.Tick(time.Duration(apiThrottleDelay) * time.Second)
 
 	/*
 		three choices for start state:
@@ -269,18 +268,18 @@ func Main() {
 		fmt.Printf("latest db time:%d [%v]\n", latestDBTime, time.Unix(latestDBTime, 0).UTC()) // XXX
 		// use 1 greater than the max time or the latest track will be duplicated
 		state = traversalState{
-			User: "grgbrn",
+			User: Username,
 			From: latestDBTime + 1,
 		}
 	} else {
 		fmt.Println("doing initial download for new database")
 		state = traversalState{
-			User: "grgbrn",
+			User: Username,
 		}
 	}
 	fmt.Printf("start state: %+v\n", state)
 
-	requestLimit := 0 // XXX set this from a param
+	// will not exceed requestCount param if set (!=0)
 	requestCount := 0
 
 	errCount := 0 // number of successive errors
