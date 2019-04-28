@@ -2,7 +2,6 @@ package localfm
 
 import (
 	"database/sql"
-	"fmt"
 	"time"
 
 	// blank import just to load drivers
@@ -43,30 +42,28 @@ func InitDB(filepath string) *sql.DB {
 	return db
 }
 
-// FindLatestTimestamp looks up the timestamp of the most recently recorded
-// entry in the database
-func FindLatestTimestamp(db *sql.DB) (time.Time, error) {
+// FindLatestTimestamp looks up the epoch time of the most recentl db entry
+// returns 0 from an empty database
+func FindLatestTimestamp(db *sql.DB) (int64, error) {
 
-	findmax := `SELECT MAX(dt) FROM lastfm_activity`
+	var maxTime int64
 
-	var maxTime time.Time
+	// avoid an error with the findmax query on an empty db
+	checkdb := `SELECT count(*) FROM lastfm_activity`
 
-	// max() expression isn't typed sufficiently for the sql driver
-	// so retrieve as a string and then parse that
-	// https://github.com/mattn/go-sqlite3/issues/190
-	var maxStr string
-	err := db.QueryRow(findmax, 1).Scan(&maxStr)
+	var tmp int
+	err := db.QueryRow(checkdb, 1).Scan(&tmp)
 	if err != nil {
 		return maxTime, err
 	}
+	if tmp == 0 {
+		return maxTime, nil // maxtime is already zero'd
+	}
 
-	// returned strings look like "2019-01-23 07:40:08.000000"
-	// the ms/ns part probably isn't important since the API is
-	// based on epoch time, so 1 second granularity, but include
-	// it in the format string anyway
-	fmt.Println(maxStr)
+	// cast the datetime into an epoch int
+	findmax := `SELECT CAST(strftime('%s', MAX(dt)) as integer) FROM lastfm_activity`
 
-	maxTime, err = time.Parse("2006-01-02 15:04:05.000000", maxStr)
+	err = db.QueryRow(findmax, 1).Scan(&maxTime)
 	if err != nil {
 		return maxTime, err
 	}

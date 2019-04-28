@@ -205,6 +205,8 @@ func resumeCheckpoint() (traversalState, error) {
 }
 
 func Main() {
+	var err error
+
 	//
 	// initialize database
 	//
@@ -220,10 +222,11 @@ func Main() {
 	dbPath := DSN[9:]
 	db = InitDB(dbPath)
 
-	fmt.Println("initialized database:")
-	fmt.Println(db)
-
-	// XXX assert that database actually exists
+	// returns err on nonexistent/corrupt db, zero val on empty db
+	latestDBTime, err := FindLatestTimestamp(db)
+	if err != nil {
+		panic("Can't open database")
+	}
 
 	//
 	// initialize lastfm api client
@@ -253,7 +256,6 @@ func Main() {
 		  all values come from the checkpoint
 
 	*/
-	var err error
 	var state traversalState
 
 	if checkpointExists() {
@@ -262,15 +264,23 @@ func Main() {
 		if err != nil {
 			panic("error resuming checkpoint")
 		}
+	} else if latestDBTime > 0 {
+		fmt.Println("doing incremental update")
+		fmt.Printf("latest db time:%d [%v]\n", latestDBTime, time.Unix(latestDBTime, 0).UTC()) // XXX
+		// use 1 greater than the max time or the latest track will be duplicated
+		state = traversalState{
+			User: "grgbrn",
+			From: latestDBTime + 1,
+		}
 	} else {
+		fmt.Println("doing initial download for new database")
 		state = traversalState{
 			User: "grgbrn",
 		}
 	}
-	// XXX check database for id for incremental update
-	fmt.Printf("initial state: %+v\n", state)
+	fmt.Printf("start state: %+v\n", state)
 
-	requestLimit := 10 // XXX set this from a param
+	requestLimit := 0 // XXX set this from a param
 	requestCount := 0
 
 	errCount := 0 // number of successive errors
@@ -322,19 +332,21 @@ func Main() {
 
 		// only break from request limit after the checkpoint has
 		// been written so it's safe to resume
-		if requestCount >= requestLimit {
+		if requestLimit > 0 && requestCount >= requestLimit {
 			fmt.Println("request limit exceeded, exiting!")
 			break
 		}
 	}
 
-	// completed! so we can remove the checkpoint file
+	// completed! so we can remove the checkpoint file (if it exists)
 	// XXX also print some stats here
 	if done {
-		err = os.Remove(checkpointFilename)
-		if err != nil {
-			fmt.Println("error removing checkpoint file. manually clean this up before next run")
-			// XXX return an error code here
+		if checkpointExists() {
+			err = os.Remove(checkpointFilename)
+			if err != nil {
+				fmt.Println("error removing checkpoint file. manually clean this up before next run")
+				// XXX return an error code here
+			}
 		}
 	} else {
 		fmt.Println("incomplete run for some reason! probably need to continue from checkpoint")
