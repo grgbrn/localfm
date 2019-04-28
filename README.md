@@ -6,7 +6,11 @@ Store a copy of your last.fm listening history in a local sqlite database for sa
 
 Requires golang with module support (1.11+)
 
-Create a new database:
+```
+go build -o localfm cmd/main.go
+```
+
+Put the compiled binary wherever you like. Then create a new database:
 
 ```
 sqlite3 $FOO.db < sqlite_schema.sql
@@ -28,7 +32,9 @@ DSN is similar to the format of sqlalchemy and other python tools. Since *localf
 export DSN="sqlite://$FOO.db"
 ```
 
+A `sample.sh` script is provided which can be customized.
+
 ## Usage
 
-Should be pretty self-explanatory. Run *localfm* on a newly created database and it will download your entire listening history. Subsequent runs will do incremental updates of new
-activity since the new run.
+Run *localfm* on a newly created database and it will download your entire listening history. Subsequent runs will do incremental updates of new activity since the last run.
+If there's an error, a `checkpoint.json` file should be written that allows the process to resume.
