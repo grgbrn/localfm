@@ -94,7 +94,7 @@ type traversalState struct {
 }
 
 func (ts traversalState) isComplete() bool {
-	return ts.TotalPages > 0 && ts.Page == ts.TotalPages
+	return ts.TotalPages > 0 && ts.Page > ts.TotalPages
 }
 
 // processResponse finds the max uts in a response, filters out the "now playing"
