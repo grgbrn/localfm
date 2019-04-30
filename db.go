@@ -21,6 +21,7 @@ CREATE TABLE lastfm_activity (
 );
 */
 
+// LastFMActivity represents a database row storing a track play
 type LastFMActivity struct {
 	ID int
 	//Doc     string // nee json
@@ -31,15 +32,19 @@ type LastFMActivity struct {
 	Dt      time.Time
 }
 
-func InitDB(filepath string) *sql.DB {
+// InitDB opens a database at a given path and tests the connection
+// Currently nonexistent sqlite file doesn't trigger an error
+// (won't happen until your first query)
+func InitDB(filepath string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", filepath)
 	if err != nil {
-		panic(err)
+		return db, err
 	}
-	if db == nil {
-		panic("db nil")
+	err = db.Ping()
+	if err != nil {
+		return db, err
 	}
-	return db
+	return db, nil
 }
 
 // FindLatestTimestamp looks up the epoch time of the most recentl db entry
@@ -98,6 +103,9 @@ func ReadItem(db *sql.DB, from int, count int) ([]LastFMActivity, error) {
 	return result, nil
 }
 
+// StoreActivity inserts a list of activity records into the database
+// using a transaction. If error is returned the transaction was rolled
+// back and no rows were inserted; otherwise all were inserted
 func StoreActivity(db *sql.DB, rows []LastFMActivity) error {
 	additem := `
 	INSERT INTO lastfm_activity(
@@ -135,21 +143,3 @@ func StoreActivity(db *sql.DB, rows []LastFMActivity) error {
 		return nil
 	}
 }
-
-/*
-func main() {
-	db := InitDB("/tmp/foo.db")
-
-	max, err := FindLatestTimestamp(db)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Printf("max timestamp:%v [%d]\n", max, max.Unix())
-
-	res := ReadItem(db, 0, 10)
-	for _, item := range res {
-		fmt.Printf("%+v\n", item)
-	}
-}
-*/

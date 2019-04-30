@@ -183,9 +183,13 @@ func writeCheckpoint(path string, state traversalState) error {
 	return nil
 }
 
-func checkpointExists() bool {
-	_, err := os.Stat(checkpointFilename)
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
+}
+
+func checkpointExists() bool {
+	return fileExists(checkpointFilename)
 }
 
 func resumeCheckpoint() (traversalState, error) {
@@ -218,12 +222,24 @@ func Main(apiThrottleDelay int, requestLimit int, recover bool) {
 		panic("DSN var must be of the format 'sqlite:///foo.db'")
 	}
 	dbPath := DSN[9:]
-	db = InitDB(dbPath)
+
+	// sqlite database drivers will automatically create empty databases
+	// if the file doesn't exist, so stat the file first and abort
+	// if there's no database (must be manually created with schema)
+	if !fileExists(dbPath) {
+		panic("Can't open database [0]")
+	}
+
+	// this seemingly never returns an error
+	db, err = InitDB(dbPath)
+	if err != nil {
+		panic("Can't open database [1]")
+	}
 
 	// returns err on nonexistent/corrupt db, zero val on empty db
 	latestDBTime, err := FindLatestTimestamp(db)
 	if err != nil {
-		panic("Can't open database")
+		panic("Can't open database [2]")
 	}
 
 	//
