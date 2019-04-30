@@ -122,7 +122,7 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 		panic("getNextTracks called on a completed state")
 	}
 
-	tracks := make([]TrackInfo, 0) // XXX any other way to define this without make()???
+	tracks := []TrackInfo{}
 	nextState := traversalState{}
 
 	// this lastfm.P thing doesn't seem very typesafe?
@@ -206,7 +206,7 @@ func resumeCheckpoint() (traversalState, error) {
 	return newState, nil
 }
 
-func Main(apiThrottleDelay int, requestLimit int, recover bool) {
+func Main(apiThrottleDelay int, requestLimit int) {
 	var err error
 
 	//
@@ -295,7 +295,7 @@ func Main(apiThrottleDelay int, requestLimit int, recover bool) {
 	}
 	fmt.Printf("start state: %+v\n", state)
 
-	// will not exceed requestCount param if set (!=0)
+	// will not exceed requestLimit param if set (!=0)
 	requestCount := 0
 
 	errCount := 0 // number of successive errors
