@@ -82,7 +82,8 @@ func printTrack(t TrackInfo) {
 }
 
 type traversalState struct {
-	User string
+	User     string
+	Database string
 
 	Page        int
 	TotalPages  int
@@ -153,8 +154,10 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 
 	maxUTS, tracks := processResponse(recentTracks)
 
-	// preserve user & anchor, update the rest from the response
+	// preserve user, database & anchor, update the rest from the response
 	nextState.User = current.User
+	nextState.Database = current.Database
+
 	nextState.Page = recentTracks.Page + 1
 	nextState.TotalPages = recentTracks.TotalPages
 	nextState.TotalTracks = recentTracks.Total
@@ -279,18 +282,23 @@ func Main(apiThrottleDelay int, requestLimit int) {
 		if err != nil {
 			panic("error resuming checkpoint")
 		}
+		if state.Database != dbPath {
+			panic("recovering from checkpoint from different database")
+		}
 	} else if latestDBTime > 0 {
 		fmt.Println("doing incremental update")
 		fmt.Printf("latest db time:%d [%v]\n", latestDBTime, time.Unix(latestDBTime, 0).UTC()) // XXX
 		// use 1 greater than the max time or the latest track will be duplicated
 		state = traversalState{
-			User: Username,
-			From: latestDBTime + 1,
+			User:     Username,
+			Database: dbPath,
+			From:     latestDBTime + 1,
 		}
 	} else {
 		fmt.Println("doing initial download for new database")
 		state = traversalState{
-			User: Username,
+			User:     Username,
+			Database: dbPath,
 		}
 	}
 	fmt.Printf("start state: %+v\n", state)
