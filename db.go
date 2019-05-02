@@ -2,6 +2,7 @@ package localfm
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	// blank import just to load drivers
@@ -142,4 +143,64 @@ func StoreActivity(db *sql.DB, rows []LastFMActivity) error {
 		tx.Commit()
 		return nil
 	}
+}
+
+// FlagDuplicates will scan all records in the database after
+// a given timestamp and set the 'duplicate' field on any rows
+// that immediately follow an identical record with a dt/uts
+// less than 'diff' seconds apart
+// XXX no duplicate field yet
+func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
+
+	count := 0
+	duplicates := 0
+
+	// XXX select by uts is kind of clumsy
+	readquery := `
+	SELECT id, artist, album, title, dt
+	from lastfm_activity
+	where CAST(strftime('%s', dt) as integer) >= ?
+	order by dt desc`
+
+	rows, err := db.Query(readquery, since)
+	if err != nil {
+		return duplicates, err
+	}
+	defer rows.Close()
+
+	var lastItem *LastFMActivity
+
+	for rows.Next() {
+		item := LastFMActivity{}
+
+		err = rows.Scan(&item.ID, &item.Artist, &item.Album, &item.Title, &item.Dt)
+		if err != nil {
+			return duplicates, err
+		}
+		count++
+
+		if lastItem != nil && sameTrack(*lastItem, item) {
+			// because of query order, lastitem should always be more
+			// recent (larger) than item, so no need for abs()
+			d := lastItem.Dt.Unix() - item.Dt.Unix()
+			// fmt.Printf("diff: %d\n", d)
+
+			if d <= diff {
+				// XXX id of the later one (lastItem) needs to be flagged as duplicate
+				fmt.Printf("duplicate found (diff=%d)\n", d)
+				fmt.Println(item)
+				fmt.Println(*lastItem)
+				duplicates++
+			}
+		}
+		lastItem = &item
+	}
+
+	pct := (float64(duplicates) / float64(count)) * 100
+	fmt.Printf("checked %d rows; %d duplicates found (%0.2f%%)\n", count, duplicates, pct)
+	return duplicates, nil
+}
+
+func sameTrack(a, b LastFMActivity) bool {
+	return a.Artist == b.Artist && a.Album == b.Album && a.Title == b.Title
 }
