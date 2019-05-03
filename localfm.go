@@ -18,7 +18,6 @@ const checkpointFilename string = "checkpoint.json"
 // module globals
 var api *lastfm.Api
 var throttle <-chan time.Time
-var db *sql.DB
 
 // lastfm lib doesn't define useful sub-structs for it's
 // result types, so do it myself...
@@ -215,6 +214,8 @@ func Main(apiThrottleDelay int, requestLimit int) {
 	//
 	// initialize database
 	//
+	var db *sql.DB
+
 	DSN := os.Getenv("DSN")
 	if DSN == "" {
 		panic("Must set DSN environment var")
@@ -335,7 +336,7 @@ func Main(apiThrottleDelay int, requestLimit int) {
 
 		// XXX review error handling here
 		fmt.Printf("* got %d tracks\n", len(tracks))
-		err = saveTracks(db, tracks)
+		err = StoreActivity(db, tracks)
 		if err != nil {
 			fmt.Println("error saving tracks!")
 			fmt.Println(err)
@@ -374,36 +375,4 @@ func Main(apiThrottleDelay int, requestLimit int) {
 	} else {
 		fmt.Println("incomplete run for some reason! probably need to continue from checkpoint")
 	}
-}
-
-// convertItem prepares an api response to be inserted into the database
-func convertItem(ti TrackInfo) (LastFMActivity, error) {
-	var act LastFMActivity
-
-	dt, err := getParsedTime(ti)
-	if err != nil {
-		return act, err
-
-	}
-	act.Title = ti.Name
-	act.Artist = ti.Artist.Name
-	act.Album = ti.Album.Name
-	act.Dt = dt
-	return act, nil
-}
-
-func saveTracks(db *sql.DB, tracks []TrackInfo) error {
-
-	var activity []LastFMActivity
-
-	for _, track := range tracks {
-		printTrack(track)
-		a, err := convertItem(track)
-		if err != nil {
-			return err
-		}
-		activity = append(activity, a)
-	}
-
-	return StoreActivity(db, activity)
 }

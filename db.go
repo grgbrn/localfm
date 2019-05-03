@@ -9,35 +9,84 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-/*
-CREATE TABLE lastfm_activity (
-	id INTEGER NOT NULL,
-	doc JSON,
-	created DATETIME,
-	artist VARCHAR(255),
-	album VARCHAR(255),
-	title VARCHAR(255),
-	dt DATETIME,
-	PRIMARY KEY (id)
-);
-*/
+type Artist struct {
+	ID   int64
+	Name string
+	MBID string
+}
 
-// LastFMActivity represents a database row storing a track play
-type LastFMActivity struct {
-	ID int
-	//Doc     string // nee json
-	Created time.Time
-	Artist  string
-	Album   string
-	Title   string
-	Dt      time.Time
+type Album struct {
+	ID   int64
+	Name string
+	MBID string
+}
+
+type Image struct {
+	ID  int64
+	URL string
+}
+
+type Activity struct {
+	ID  int64
+	UTS int
+	DT  time.Time
+
+	Title string
+	MBID  string
+	URL   string
+
+	Artist Artist
+	Album  Album
+
+	Duplicate bool
+
+	// don't go crazy with denormalization just yet...
+	ArtistName string
+	AlbumName  string
+}
+
+// XXX no caching here... with sqlite it probably doesn't matter much?
+func getOrCreateArtist(db *sql.DB, name string, mbid string) (Artist, error) {
+	selQuery := `SELECT id, name, mbid FROM artist WHERE mbid=?`
+	insQuery := `INSERT INTO artist(name, mbid) values (?,?)`
+
+	// XXX use prepared statements?
+
+	var artist Artist
+
+	err := db.QueryRow(selQuery, mbid).Scan(&artist.ID, &artist.Name, &artist.MBID)
+	if err == nil { // found existing entry
+		return artist, nil
+	}
+	// otherwise have to create a new one
+	res, err := db.Exec(insQuery, name, mbid)
+	if err != nil {
+		// error creating new row
+		return artist, err
+	}
+	// need to to update artist with newly created id
+	lastId, err := res.LastInsertId()
+	if err != nil {
+		return artist, err
+	}
+	// XXX seems a bit janky
+	artist.ID = lastId
+	artist.Name = name
+	artist.MBID = mbid
+
+	return artist, nil
 }
 
 // InitDB opens a database at a given path and tests the connection
 // Currently nonexistent sqlite file doesn't trigger an error
 // (won't happen until your first query)
 func InitDB(filepath string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", filepath)
+	// this driver can use urls to pass magic params to the driver
+	// which in this case we need to tweak txn isolation to work
+	// with golang's connection pool
+	dburl := fmt.Sprintf("file:%s?cache=shared", filepath)
+	fmt.Println(dburl)
+	db, err := sql.Open("sqlite3", dburl)
 	if err != nil {
 		return db, err
 	}
@@ -52,6 +101,7 @@ func InitDB(filepath string) (*sql.DB, error) {
 // returns 0 from an empty database
 func FindLatestTimestamp(db *sql.DB) (int64, error) {
 
+	/* XXX update for new schema
 	var maxTime int64
 
 	// avoid an error with the findmax query on an empty db
@@ -74,71 +124,66 @@ func FindLatestTimestamp(db *sql.DB) (int64, error) {
 		return maxTime, err
 	}
 	return maxTime, nil
-}
-
-// ReadItem loads a series of records from the db using timestamp offset
-// and count. Not currently used or very well vetted.
-func ReadItem(db *sql.DB, from int, count int) ([]LastFMActivity, error) {
-	readquery := `
-	SELECT id, created, artist, album, title, dt
-	from lastfm_activity
-	where dt >= ?
-	limit ?`
-
-	var result []LastFMActivity
-
-	rows, err := db.Query(readquery, from, count)
-	if err != nil {
-		return result, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		item := LastFMActivity{}
-		err2 := rows.Scan(&item.ID, &item.Created, &item.Artist, &item.Album, &item.Title, &item.Dt)
-		if err2 != nil {
-			return result, err2
-		}
-		result = append(result, item)
-	}
-	return result, nil
+	*/
+	return 0, nil
 }
 
 // StoreActivity inserts a list of activity records into the database
 // using a transaction. If error is returned the transaction was rolled
 // back and no rows were inserted; otherwise all were inserted
-func StoreActivity(db *sql.DB, rows []LastFMActivity) error {
-	additem := `
-	INSERT INTO lastfm_activity(
-		created,
-		artist,
-		album,
-		title,
-		dt
-	) values (CURRENT_TIMESTAMP, ?, ?, ?, ?)
-	`
+func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
+
+	// additem := `
+	// INSERT INTO lastfm_activity(
+	// 	created,
+	// 	artist,
+	// 	album,
+	// 	title,
+	// 	dt
+	// ) values (CURRENT_TIMESTAMP, ?, ?, ?, ?)
+	// `
 
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
 
-	stmt, err := tx.Prepare(additem)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
+	// XXX need a new insert query
+	// stmt, err := tx.Prepare(additem)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer stmt.Close()
 
-	var insertErr error
-	for _, r := range rows {
-		_, insertErr = stmt.Exec(r.Artist, r.Album, r.Title, r.Dt)
-		if insertErr != nil {
+	var e error
+	for _, track := range tracks {
+
+		// activity row is denormalized and depends on three other rows:
+		// - artist
+		// - album
+		// - url
+
+		// so all three of those must be looked up or inserted before
+		// we can try to deal with the activity row
+
+		artist, e := getOrCreateArtist(db, track.Artist.Name, track.Artist.Mbid)
+		if e != nil {
+			fmt.Printf("error inserting artist:%s mbid:%s\n", track.Artist.Name, track.Artist.Mbid)
+			fmt.Println(e)
 			break
 		}
+		fmt.Println(artist)
+
+		/*
+			_, insertErr = stmt.Exec(r.Artist, r.Album, r.Title, r.Dt)
+			if insertErr != nil {
+				break
+			}
+		*/
 	}
-	if insertErr != nil {
+	if e != nil {
 		tx.Rollback()
-		return insertErr
+		return e
 	} else {
 		tx.Commit()
 		return nil
@@ -150,6 +195,7 @@ func StoreActivity(db *sql.DB, rows []LastFMActivity) error {
 // that immediately follow an identical record with a dt/uts
 // less than 'diff' seconds apart
 // XXX no duplicate field yet
+/*
 func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
 
 	count := 0
@@ -204,3 +250,4 @@ func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
 func sameTrack(a, b LastFMActivity) bool {
 	return a.Artist == b.Artist && a.Album == b.Album && a.Title == b.Title
 }
+*/
