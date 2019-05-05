@@ -12,13 +12,13 @@ import (
 type Artist struct {
 	ID   int64
 	Name string
-	MBID string
+	MBID sql.NullString
 }
 
 type Album struct {
 	ID   int64
 	Name string
-	MBID string
+	MBID sql.NullString
 }
 
 type Image struct {
@@ -45,36 +45,87 @@ type Activity struct {
 	AlbumName  string
 }
 
+func toNullString(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: s != ""}
+}
+
 // XXX no caching here... with sqlite it probably doesn't matter much?
 func getOrCreateArtist(db *sql.DB, name string, mbid string) (Artist, error) {
-	selQuery := `SELECT id, name, mbid FROM artist WHERE mbid=?`
-	insQuery := `INSERT INTO artist(name, mbid) values (?,?)`
-
-	// XXX use prepared statements?
 
 	var artist Artist
+	var err error
 
-	err := db.QueryRow(selQuery, mbid).Scan(&artist.ID, &artist.Name, &artist.MBID)
+	nullMBID := toNullString(mbid)
+
+	// select query depends on null
+	var selQuery string
+	if nullMBID.Valid { // not null
+		selQuery = `SELECT id, name, mbid FROM artist WHERE name=? and mbid=?`
+		err = db.QueryRow(selQuery, name, nullMBID).Scan(&artist.ID, &artist.Name, &artist.MBID)
+	} else {
+		selQuery = `SELECT id, name, mbid FROM artist WHERE name=? and mbid is null`
+		err = db.QueryRow(selQuery, name).Scan(&artist.ID, &artist.Name, &artist.MBID)
+	}
 	if err == nil { // found existing entry
 		return artist, nil
 	}
+
 	// otherwise have to create a new one
-	res, err := db.Exec(insQuery, name, mbid)
+	insQuery := `INSERT INTO artist(name, mbid) values (?,?)`
+	res, err := db.Exec(insQuery, name, nullMBID)
 	if err != nil {
 		// error creating new row
 		return artist, err
 	}
-	// need to to update artist with newly created id
-	lastId, err := res.LastInsertId()
+	// need to return an artist struct with newly created ID
+	lastID, err := res.LastInsertId()
 	if err != nil {
 		return artist, err
 	}
-	// XXX seems a bit janky
-	artist.ID = lastId
+	artist.ID = lastID
 	artist.Name = name
-	artist.MBID = mbid
+	artist.MBID = nullMBID
 
 	return artist, nil
+}
+
+func getOrCreateAlbum(db *sql.DB, name string, mbid string) (Album, error) {
+
+	var album Album
+	var err error
+
+	nullMBID := toNullString(mbid)
+
+	// select query depends on null
+	var selQuery string
+	if nullMBID.Valid { // not null
+		selQuery = `SELECT id, name, mbid FROM album WHERE name=? and mbid=?`
+		err = db.QueryRow(selQuery, name, nullMBID).Scan(&album.ID, &album.Name, &album.MBID)
+	} else {
+		selQuery = `SELECT id, name, mbid FROM album WHERE name=? and mbid is null`
+		err = db.QueryRow(selQuery, name).Scan(&album.ID, &album.Name, &album.MBID)
+	}
+	if err == nil { // found existing entry
+		return album, nil
+	}
+
+	// otherwise have to create a new one
+	insQuery := `INSERT INTO album(name, mbid) values (?,?)`
+	res, err := db.Exec(insQuery, name, nullMBID)
+	if err != nil {
+		// error creating new row
+		return album, err
+	}
+	// need to return an album struct with newly created ID
+	lastID, err := res.LastInsertId()
+	if err != nil {
+		return album, err
+	}
+	album.ID = lastID
+	album.Name = name
+	album.MBID = nullMBID
+
+	return album, nil
 }
 
 // InitDB opens a database at a given path and tests the connection
@@ -173,6 +224,14 @@ func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
 			break
 		}
 		fmt.Println(artist)
+
+		album, e := getOrCreateAlbum(db, track.Album.Name, track.Album.Mbid)
+		if e != nil {
+			fmt.Printf("error inserting album:%s mbid:%s\n", track.Album.Name, track.Album.Mbid)
+			fmt.Println(e)
+			break
+		}
+		fmt.Println(album)
 
 		/*
 			_, insertErr = stmt.Exec(r.Artist, r.Album, r.Title, r.Dt)

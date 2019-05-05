@@ -27,16 +27,18 @@ CREATE TABLE activity (
 
 CREATE TABLE artist (
 	id integer not null,
-	name VARCHAR(255),
+	name VARCHAR(255) not null,
 	mbid VARCHAR(255),
-	PRIMARY KEY (id)
+	PRIMARY KEY (id),
+	CONSTRAINT artist_unique UNIQUE (name, mbid)
 );
 
 CREATE TABLE album (
 	id INTEGER NOT NULL,
-	name VARCHAR(255),
+	name VARCHAR(255) not null,
 	mbid VARCHAR(255),
-	PRIMARY KEY (id)
+	PRIMARY KEY (id),
+	CONSTRAINT album_unique UNIQUE (name, mbid)
 );
 
 CREATE TABLE image (
