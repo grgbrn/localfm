@@ -49,22 +49,21 @@ func toNullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
 }
 
-// XXX no caching here... with sqlite it probably doesn't matter much?
-func getOrCreateArtist(db *sql.DB, name string, mbid string) (Artist, error) {
+func getOrCreateArtist(tx *sql.Tx, name string, mbid string) (Artist, error) {
 
 	var artist Artist
 	var err error
 
 	nullMBID := toNullString(mbid)
 
-	// select query depends on null
+	// select query depends on whether mbid value is null
 	var selQuery string
 	if nullMBID.Valid { // not null
 		selQuery = `SELECT id, name, mbid FROM artist WHERE name=? and mbid=?`
-		err = db.QueryRow(selQuery, name, nullMBID).Scan(&artist.ID, &artist.Name, &artist.MBID)
+		err = tx.QueryRow(selQuery, name, nullMBID).Scan(&artist.ID, &artist.Name, &artist.MBID)
 	} else {
 		selQuery = `SELECT id, name, mbid FROM artist WHERE name=? and mbid is null`
-		err = db.QueryRow(selQuery, name).Scan(&artist.ID, &artist.Name, &artist.MBID)
+		err = tx.QueryRow(selQuery, name).Scan(&artist.ID, &artist.Name, &artist.MBID)
 	}
 	if err == nil { // found existing entry
 		return artist, nil
@@ -72,7 +71,7 @@ func getOrCreateArtist(db *sql.DB, name string, mbid string) (Artist, error) {
 
 	// otherwise have to create a new one
 	insQuery := `INSERT INTO artist(name, mbid) values (?,?)`
-	res, err := db.Exec(insQuery, name, nullMBID)
+	res, err := tx.Exec(insQuery, name, nullMBID)
 	if err != nil {
 		// error creating new row
 		return artist, err
@@ -89,21 +88,21 @@ func getOrCreateArtist(db *sql.DB, name string, mbid string) (Artist, error) {
 	return artist, nil
 }
 
-func getOrCreateAlbum(db *sql.DB, name string, mbid string) (Album, error) {
+func getOrCreateAlbum(tx *sql.Tx, name string, mbid string) (Album, error) {
 
 	var album Album
 	var err error
 
 	nullMBID := toNullString(mbid)
 
-	// select query depends on null
+	// select query depends on whether mbid value is null
 	var selQuery string
 	if nullMBID.Valid { // not null
 		selQuery = `SELECT id, name, mbid FROM album WHERE name=? and mbid=?`
-		err = db.QueryRow(selQuery, name, nullMBID).Scan(&album.ID, &album.Name, &album.MBID)
+		err = tx.QueryRow(selQuery, name, nullMBID).Scan(&album.ID, &album.Name, &album.MBID)
 	} else {
 		selQuery = `SELECT id, name, mbid FROM album WHERE name=? and mbid is null`
-		err = db.QueryRow(selQuery, name).Scan(&album.ID, &album.Name, &album.MBID)
+		err = tx.QueryRow(selQuery, name).Scan(&album.ID, &album.Name, &album.MBID)
 	}
 	if err == nil { // found existing entry
 		return album, nil
@@ -111,7 +110,7 @@ func getOrCreateAlbum(db *sql.DB, name string, mbid string) (Album, error) {
 
 	// otherwise have to create a new one
 	insQuery := `INSERT INTO album(name, mbid) values (?,?)`
-	res, err := db.Exec(insQuery, name, nullMBID)
+	res, err := tx.Exec(insQuery, name, nullMBID)
 	if err != nil {
 		// error creating new row
 		return album, err
@@ -184,29 +183,34 @@ func FindLatestTimestamp(db *sql.DB) (int64, error) {
 // back and no rows were inserted; otherwise all were inserted
 func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
 
-	// additem := `
-	// INSERT INTO lastfm_activity(
-	// 	created,
-	// 	artist,
-	// 	album,
-	// 	title,
-	// 	dt
-	// ) values (CURRENT_TIMESTAMP, ?, ?, ?, ?)
-	// `
-
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
 
-	// XXX need a new insert query
-	// stmt, err := tx.Prepare(additem)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer stmt.Close()
+	additem := `
+	INSERT INTO activity(
+		uts,
+		dt,
+		title,
+		mbid,
+		url,
+		artist,
+		artist_id,
+		album,
+		album_id
+	) values (?,?,?,?,?,?,?,?,?)
+	`
+	stmt, err := tx.Prepare(additem)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
 
 	var e error
+	var artist Artist
+	var album Album
+
 	for _, track := range tracks {
 
 		// activity row is denormalized and depends on three other rows:
@@ -214,10 +218,9 @@ func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
 		// - album
 		// - url
 
-		// so all three of those must be looked up or inserted before
-		// we can try to deal with the activity row
-
-		artist, e := getOrCreateArtist(db, track.Artist.Name, track.Artist.Mbid)
+		// so all three of those must be resolved before the activity row
+		// can be created
+		artist, e = getOrCreateArtist(tx, track.Artist.Name, track.Artist.Mbid)
 		if e != nil {
 			fmt.Printf("error inserting artist:%s mbid:%s\n", track.Artist.Name, track.Artist.Mbid)
 			fmt.Println(e)
@@ -225,25 +228,50 @@ func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
 		}
 		fmt.Println(artist)
 
-		album, e := getOrCreateAlbum(db, track.Album.Name, track.Album.Mbid)
+		album, e = getOrCreateAlbum(tx, track.Album.Name, track.Album.Mbid)
 		if e != nil {
 			fmt.Printf("error inserting album:%s mbid:%s\n", track.Album.Name, track.Album.Mbid)
 			fmt.Println(e)
 			break
 		}
-		fmt.Println(album)
 
-		/*
-			_, insertErr = stmt.Exec(r.Artist, r.Album, r.Title, r.Dt)
-			if insertErr != nil {
-				break
-			}
-		*/
+		uts, e := getParsedUTS(track)
+		if e != nil {
+			fmt.Printf("error parsing UTS: %v\n", e)
+			break
+		}
+		dt, e := getParsedTime(track)
+		if e != nil {
+			fmt.Printf("error parsing time: %v\n", e)
+			break
+		}
+
+		_, e = stmt.Exec(
+			uts,
+			dt,
+			track.Name,
+			track.Mbid,
+			track.Url,
+			artist.Name,
+			artist.ID,
+			album.Name,
+			album.ID,
+		)
+		if e != nil {
+			fmt.Println("error inserting activity row")
+			fmt.Println(e)
+			break
+		}
 	}
+
+	fmt.Printf("done processing tracks. err=%v\n", e)
+
 	if e != nil {
+		fmt.Printf("rolling back after error:%v\n", e)
 		tx.Rollback()
 		return e
 	} else {
+		fmt.Println("committing!")
 		tx.Commit()
 		return nil
 	}
