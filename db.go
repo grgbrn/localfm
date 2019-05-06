@@ -131,12 +131,7 @@ func getOrCreateAlbum(tx *sql.Tx, name string, mbid string) (Album, error) {
 // Currently nonexistent sqlite file doesn't trigger an error
 // (won't happen until your first query)
 func InitDB(filepath string) (*sql.DB, error) {
-	// this driver can use urls to pass magic params to the driver
-	// which in this case we need to tweak txn isolation to work
-	// with golang's connection pool
-	dburl := fmt.Sprintf("file:%s?cache=shared", filepath)
-	fmt.Println(dburl)
-	db, err := sql.Open("sqlite3", dburl)
+	db, err := sql.Open("sqlite3", filepath)
 	if err != nil {
 		return db, err
 	}
