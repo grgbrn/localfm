@@ -142,15 +142,14 @@ func InitDB(filepath string) (*sql.DB, error) {
 	return db, nil
 }
 
-// FindLatestTimestamp looks up the epoch time of the most recentl db entry
+// FindLatestTimestamp looks up the epoch time of the most recent db entry
 // returns 0 from an empty database
 func FindLatestTimestamp(db *sql.DB) (int64, error) {
 
-	/* XXX update for new schema
 	var maxTime int64
 
 	// avoid an error with the findmax query on an empty db
-	checkdb := `SELECT count(*) FROM lastfm_activity`
+	checkdb := `SELECT count(*) FROM activity`
 
 	var tmp int
 	err := db.QueryRow(checkdb, 1).Scan(&tmp)
@@ -161,16 +160,13 @@ func FindLatestTimestamp(db *sql.DB) (int64, error) {
 		return maxTime, nil // maxtime is already zero'd
 	}
 
-	// cast the datetime into an epoch int
-	findmax := `SELECT CAST(strftime('%s', MAX(dt)) as integer) FROM lastfm_activity`
+	findmax := `SELECT max(uts) FROM activity`
 
 	err = db.QueryRow(findmax, 1).Scan(&maxTime)
 	if err != nil {
 		return maxTime, err
 	}
 	return maxTime, nil
-	*/
-	return 0, nil
 }
 
 // StoreActivity inserts a list of activity records into the database
