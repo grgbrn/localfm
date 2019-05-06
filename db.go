@@ -28,7 +28,7 @@ type Image struct {
 
 type Activity struct {
 	ID  int64
-	UTS int
+	UTS int64
 	DT  time.Time
 
 	Title string
@@ -272,19 +272,16 @@ func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
 // a given timestamp and set the 'duplicate' field on any rows
 // that immediately follow an identical record with a dt/uts
 // less than 'diff' seconds apart
-// XXX no duplicate field yet
-/*
 func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
 
 	count := 0
 	duplicates := 0
 
-	// XXX select by uts is kind of clumsy
 	readquery := `
-	SELECT id, artist, album, title, dt
-	from lastfm_activity
-	where CAST(strftime('%s', dt) as integer) >= ?
-	order by dt desc`
+	SELECT id, uts, title, artist, album
+	from activity
+	where uts >= ?
+	order by uts desc`
 
 	rows, err := db.Query(readquery, since)
 	if err != nil {
@@ -292,12 +289,12 @@ func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
 	}
 	defer rows.Close()
 
-	var lastItem *LastFMActivity
+	var lastItem *Activity
 
 	for rows.Next() {
-		item := LastFMActivity{}
+		item := Activity{}
 
-		err = rows.Scan(&item.ID, &item.Artist, &item.Album, &item.Title, &item.Dt)
+		err = rows.Scan(&item.ID, &item.UTS, &item.Title, &item.ArtistName, &item.AlbumName)
 		if err != nil {
 			return duplicates, err
 		}
@@ -306,7 +303,7 @@ func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
 		if lastItem != nil && sameTrack(*lastItem, item) {
 			// because of query order, lastitem should always be more
 			// recent (larger) than item, so no need for abs()
-			d := lastItem.Dt.Unix() - item.Dt.Unix()
+			d := lastItem.UTS - item.UTS
 			// fmt.Printf("diff: %d\n", d)
 
 			if d <= diff {
@@ -325,7 +322,6 @@ func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
 	return duplicates, nil
 }
 
-func sameTrack(a, b LastFMActivity) bool {
-	return a.Artist == b.Artist && a.Album == b.Album && a.Title == b.Title
+func sameTrack(a, b Activity) bool {
+	return a.Title == b.Title && a.ArtistName == b.ArtistName && a.AlbumName == b.AlbumName
 }
-*/
