@@ -32,6 +32,17 @@ DSN is similar to the format of sqlalchemy and other python tools. Since *localf
 export DSN="sqlite://$FOO.db"
 ```
 
+last.fm streams occasionally contain repeated entries a few seconds apart
+which can affect your metrics.  localfm can be configured to flag these repeated entries and exclude them from it's statistics. To enable this
+feature, set a threshold (in seconds) in the environment var `LOCALFM_DUPLICATE_THRESHOLD`.  Any tracks that are repeated
+    in this interval or less will be flagged.
+
+```
+export LOCALFM_DUPLICATE_THRESHOLD="5"
+```
+
+
+
 A `sample.sh` script is provided which can be customized.
 
 ## Usage

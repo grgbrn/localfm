@@ -208,7 +208,7 @@ func resumeCheckpoint() (traversalState, error) {
 	return newState, nil
 }
 
-func Main(apiThrottleDelay int, requestLimit int) {
+func Main(apiThrottleDelay int, requestLimit int, checkAllDuplicates bool) {
 	var err error
 
 	//
@@ -310,6 +310,8 @@ func Main(apiThrottleDelay int, requestLimit int) {
 	errCount := 0 // number of successive errors
 	maxRetries := 3
 
+	newItems := 0
+
 	done := false
 
 	for !done {
@@ -342,6 +344,7 @@ func Main(apiThrottleDelay int, requestLimit int) {
 			fmt.Println(err)
 			break
 		}
+		newItems += len(tracks)
 
 		// write checkpoint and update state only if there
 		// were no errors processing the items
@@ -359,6 +362,31 @@ func Main(apiThrottleDelay int, requestLimit int) {
 		if requestLimit > 0 && requestCount >= requestLimit {
 			fmt.Println("request limit exceeded, exiting!")
 			break
+		}
+	}
+
+	// incremental duplicate suppression if env var is set
+	// commandline flag will cause it to re-check the entire database
+	duplicateThreshold := os.Getenv("LOCALFM_DUPLICATE_THRESHOLD")
+	if checkAllDuplicates && duplicateThreshold == "" {
+		fmt.Println("Warning! Must set LOCALFM_DUPLICATE_THRESHOLD with -duplicates flag")
+	}
+	if duplicateThreshold != "" {
+		duplicateThresholdInt, err := strconv.Atoi(duplicateThreshold)
+		if err != nil {
+			fmt.Printf("Warning! LOCALFM_DUPLICATE_THRESHOLD couldn't be parsed: %v\n", err)
+		} else {
+			var since int64
+			if checkAllDuplicates {
+				since = 0
+			} else {
+				since = latestDBTime
+			}
+
+			_, err = FlagDuplicates(db, since, int64(duplicateThresholdInt))
+			if err != nil {
+				fmt.Printf("Warning! problem flagging duplicates: %v\n", err)
+			}
 		}
 	}
 

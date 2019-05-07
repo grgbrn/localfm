@@ -307,6 +307,7 @@ func findDuplicates(db *sql.DB, since int64, diff int64) (duplicateTrackResult, 
 
 		err = rows.Scan(&item.ID, &item.UTS, &item.Title, &item.ArtistName, &item.AlbumName)
 		if err != nil {
+			// XXX will be returning bogus count number here
 			return res, err
 		}
 		count++
@@ -345,13 +346,16 @@ func sameTrack(a, b Activity) bool {
 // less than 'diff' seconds apart
 func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
 
-	fmt.Printf("checking for duplicates with diff=%d\n", diff)
+	fmt.Printf("Checking for duplicates with diff=%d\n", diff)
 	dupResult, err := findDuplicates(db, since, diff)
 	if err != nil {
 		return 0, err
 	}
-
 	fmt.Println(dupResult)
+
+	if dupResult.DuplicateCount == 0 { // nothing to do
+		return 0, nil
+	}
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -381,8 +385,8 @@ func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
 	err = tx.Commit()
 	if err != nil {
 		fmt.Printf("Error committing update: %v\n", err)
-	} else {
-		fmt.Printf("flagged %d duplicate activity entries\n", rowsAffected)
+		return 0, err
 	}
+	fmt.Printf("flagged %d duplicate activity entries\n", rowsAffected)
 	return int(rowsAffected), nil
 }
