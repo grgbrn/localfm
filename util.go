@@ -13,3 +13,15 @@ func Pow(a, b int) int {
 	}
 	return p
 }
+
+// InterfaceSliceInt64 allows []int64 to be used as varargs
+// (definitely an ugly corner of go). This is more complicated than
+// a simple cast, as explained:
+// https://github.com/golang/go/wiki/InterfaceSlice
+func InterfaceSliceInt64(data []int64) []interface{} {
+	var interfaceSlice = make([]interface{}, len(data))
+	for i, d := range data {
+		interfaceSlice[i] = d
+	}
+	return interfaceSlice
+}

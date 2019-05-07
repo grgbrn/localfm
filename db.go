@@ -3,6 +3,7 @@ package localfm
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	// blank import just to load drivers
@@ -268,14 +269,23 @@ func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
 	}
 }
 
-// FlagDuplicates will scan all records in the database after
-// a given timestamp and set the 'duplicate' field on any rows
-// that immediately follow an identical record with a dt/uts
-// less than 'diff' seconds apart
-func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
+type duplicateTrackResult struct {
+	CheckedCount   int
+	DuplicateCount int
+	DuplicateIDs   []int64
+}
+
+func (res duplicateTrackResult) String() string {
+	pct := (float64(res.DuplicateCount) / float64(res.CheckedCount)) * 100
+	return fmt.Sprintf("checked %d rows; %d duplicates found (%0.2f%%)", res.CheckedCount, res.DuplicateCount, pct)
+}
+
+// XXX rename diff to threshold or something
+func findDuplicates(db *sql.DB, since int64, diff int64) (duplicateTrackResult, error) {
+
+	var res = duplicateTrackResult{}
 
 	count := 0
-	duplicates := 0
 
 	readquery := `
 	SELECT id, uts, title, artist, album
@@ -285,18 +295,19 @@ func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
 
 	rows, err := db.Query(readquery, since)
 	if err != nil {
-		return duplicates, err
+		return res, err
 	}
 	defer rows.Close()
 
 	var lastItem *Activity
+	var duplicateIDs []int64
 
 	for rows.Next() {
 		item := Activity{}
 
 		err = rows.Scan(&item.ID, &item.UTS, &item.Title, &item.ArtistName, &item.AlbumName)
 		if err != nil {
-			return duplicates, err
+			return res, err
 		}
 		count++
 
@@ -307,21 +318,71 @@ func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
 			// fmt.Printf("diff: %d\n", d)
 
 			if d <= diff {
-				// XXX id of the later one (lastItem) needs to be flagged as duplicate
-				fmt.Printf("duplicate found (diff=%d)\n", d)
-				fmt.Println(item)
-				fmt.Println(*lastItem)
-				duplicates++
+				// consider the later element to be the duplicate
+				// fmt.Printf("duplicate found (diff=%d)\n", d)
+				// fmt.Println(item)
+				// fmt.Println(*lastItem)
+				duplicateIDs = append(duplicateIDs, lastItem.ID)
 			}
 		}
 		lastItem = &item
 	}
 
-	pct := (float64(duplicates) / float64(count)) * 100
-	fmt.Printf("checked %d rows; %d duplicates found (%0.2f%%)\n", count, duplicates, pct)
-	return duplicates, nil
+	return duplicateTrackResult{
+		CheckedCount:   count,
+		DuplicateCount: len(duplicateIDs),
+		DuplicateIDs:   duplicateIDs,
+	}, nil
 }
 
 func sameTrack(a, b Activity) bool {
 	return a.Title == b.Title && a.ArtistName == b.ArtistName && a.AlbumName == b.AlbumName
+}
+
+// FlagDuplicates will scan all records in the database after
+// a given timestamp and set the 'duplicate' field on any rows
+// that immediately follow an identical record with a dt/uts
+// less than 'diff' seconds apart
+func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
+
+	fmt.Printf("checking for duplicates with diff=%d\n", diff)
+	dupResult, err := findDuplicates(db, since, diff)
+	if err != nil {
+		return 0, err
+	}
+
+	fmt.Println(dupResult)
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+
+	// sql lib can't use int slices as parameters so construct a parameter
+	// string that matches the number of items in our set
+	update := `UPDATE activity SET duplicate=true WHERE ID IN (?` + strings.Repeat(",?", dupResult.DuplicateCount-1) + `)`
+
+	// fmt.Println(update)
+	// fmt.Println(dupResult.DuplicateIDs)
+
+	updResult, err := tx.Exec(update, InterfaceSliceInt64(dupResult.DuplicateIDs)...)
+	if err != nil {
+		fmt.Printf("rolling back after error:%v\n", err)
+		tx.Rollback()
+		return 0, err
+	}
+
+	// XXX what even does err mean here?
+	rowsAffected, _ := updResult.RowsAffected()
+	if rowsAffected != int64(dupResult.DuplicateCount) {
+		fmt.Printf("Warning: incomplete update (%d/%d rows)\n", rowsAffected, dupResult.DuplicateCount)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		fmt.Printf("Error committing update: %v\n", err)
+	} else {
+		fmt.Printf("flagged %d duplicate activity entries\n", rowsAffected)
+	}
+	return int(rowsAffected), nil
 }
