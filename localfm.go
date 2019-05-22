@@ -134,7 +134,7 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 
 	// this lastfm.P thing doesn't seem very typesafe?
 	params := lastfm.P{
-		"user": "grgbrn",
+		"user": current.User,
 	}
 	// need to pass to, from, page params from current state
 	if current.To != 0 {
