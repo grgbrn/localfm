@@ -93,8 +93,12 @@ type traversalState struct {
 	To   int64 // nee Anchor
 }
 
+func (ts traversalState) isInitial() bool {
+	return ts.To == 0
+}
+
 func (ts traversalState) isComplete() bool {
-	return ts.TotalPages > 0 && ts.Page > ts.TotalPages
+	return !ts.isInitial() && (ts.TotalPages == 0 || ts.Page > ts.TotalPages)
 }
 
 // processResponse finds the max uts in a response, filters out the "now playing"
@@ -124,7 +128,10 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 	}
 
 	tracks := []TrackInfo{}
-	nextState := traversalState{}
+	nextState := traversalState{
+		User:     current.User,
+		Database: current.Database,
+	}
 
 	// this lastfm.P thing doesn't seem very typesafe?
 	params := lastfm.P{
@@ -152,15 +159,14 @@ func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) 
 	}
 	fmt.Printf("got page %d/%d\n", recentTracks.Page, recentTracks.TotalPages)
 
-	maxUTS, tracks := processResponse(recentTracks)
-
-	// preserve user, database & anchor, update the rest from the response
-	nextState.User = current.User
-	nextState.Database = current.Database
-
-	nextState.Page = recentTracks.Page + 1
+	// update the next state with totals from the response
+	// (these should not change during a traversal)
 	nextState.TotalPages = recentTracks.TotalPages
 	nextState.TotalTracks = recentTracks.Total
+
+	maxUTS, tracks := processResponse(recentTracks)
+
+	nextState.Page = recentTracks.Page + 1
 	nextState.From = current.From
 	if current.To != 0 {
 		nextState.To = current.To
