@@ -71,3 +71,11 @@ strftime('%Y', a.dt)='2018'
 and duplicate=false
 group by 1, 2
 order by 1, 2;
+
+-- "listening clock" query
+select strftime('%H', dt) as hour, count(*) as c
+from activity
+where dt >= '2019-04-01' and dt < '2019-05-01'
+and duplicate=false
+group by 1
+order by 1;
