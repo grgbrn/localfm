@@ -128,6 +128,36 @@ func getOrCreateAlbum(tx *sql.Tx, name string, mbid string) (Album, error) {
 	return album, nil
 }
 
+func getOrCreateImage(tx *sql.Tx, url string) (Image, error) {
+
+	var image Image
+	var err error
+
+	selQuery := `SELECT id, url FROM image WHERE url=?`
+	err = tx.QueryRow(selQuery, url).Scan(&image.ID, &image.URL)
+
+	if err == nil { // found existing entry
+		return image, nil
+	}
+
+	// otherwise have to create a new one
+	insQuery := `INSERT INTO image(url) values (?)`
+	res, err := tx.Exec(insQuery, url)
+	if err != nil {
+		// error creating new row
+		return image, err
+	}
+	// need to return an image struct with newly created ID
+	lastID, err := res.LastInsertId()
+	if err != nil {
+		return image, err
+	}
+	image.ID = lastID
+	image.URL = url
+
+	return image, nil
+}
+
 // InitDB opens a database at a given path and tests the connection
 // Currently nonexistent sqlite file doesn't trigger an error
 // (won't happen until your first query)
@@ -190,8 +220,9 @@ func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
 		artist,
 		artist_id,
 		album,
-		album_id
-	) values (?,?,?,?,?,?,?,?,?)
+		album_id,
+		image_id
+	) values (?,?,?,?,?,?,?,?,?,?)
 	`
 	stmt, err := tx.Prepare(additem)
 	if err != nil {
@@ -202,6 +233,7 @@ func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
 	var e error
 	var artist Artist
 	var album Album
+	var image Image
 
 	for _, track := range tracks {
 
@@ -227,6 +259,14 @@ func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
 			break
 		}
 
+		u := ChooseImageURL(track)
+		image, e = getOrCreateImage(tx, u)
+		if e != nil {
+			fmt.Printf("error inserting image:%s mbid:%s\n", track.Album.Name, track.Album.Mbid)
+			fmt.Println(e)
+			break
+		}
+
 		uts, e := getParsedUTS(track)
 		if e != nil {
 			fmt.Printf("error parsing UTS: %v\n", e)
@@ -248,6 +288,7 @@ func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
 			artist.ID,
 			album.Name,
 			album.ID,
+			image.ID,
 		)
 		if e != nil {
 			fmt.Println("error inserting activity row")

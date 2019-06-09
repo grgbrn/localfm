@@ -43,6 +43,6 @@ CREATE TABLE album (
 
 CREATE TABLE image (
 	id INTEGER NOT NULL,
-	url VARCHAR(255),
+	url VARCHAR(255) not null,
 	PRIMARY KEY (id)
 );

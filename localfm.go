@@ -46,6 +46,14 @@ type TrackInfo struct {
 	} `xml:"date"`
 }
 
+// XXX maybe this is overkill, just choose the last one for now
+var trackInfoImageWeights = map[string]int{
+	"small":      1,
+	"medium":     2,
+	"large":      3,
+	"extralarge": 4,
+}
+
 func getParsedUTS(ti TrackInfo) (int64, error) {
 	epoch, err := strconv.Atoi(ti.Date.Uts)
 	if err != nil {
@@ -78,6 +86,22 @@ func printTrack(t TrackInfo) {
 		}
 	}
 	fmt.Printf("%s - %s %s\n", t.Name, t.Artist.Name, dateSuffix)
+}
+
+// ChooseImageURL selects the best quality image url from a list of choices in a TrackInfo
+func ChooseImageURL(t TrackInfo) string {
+
+	var best int
+	var url string
+
+	for _, s := range t.Images {
+		v, _ := trackInfoImageWeights[s.Size]
+		if v > best {
+			best = v
+			url = s.Url
+		}
+	}
+	return url
 }
 
 type traversalState struct {
