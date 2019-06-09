@@ -79,3 +79,15 @@ where dt >= '2019-04-01' and dt < '2019-05-01'
 and duplicate=false
 group by 1
 order by 1;
+
+-- "new artists" query
+-- only really by play count though
+select artist, min(dt) as first, count(*) as plays
+from activity
+group by artist
+having plays > 5 and first >= '2019-05-01'
+order by first desc;
+
+-- a version that uses distinct to filter out a single
+-- track from a spotify playlist that i played 8 times
+-- XXX how do i do this?
