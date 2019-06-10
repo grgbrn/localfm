@@ -88,6 +88,28 @@ group by artist
 having plays > 5 and first >= '2019-05-01'
 order by first desc;
 
+-- artists by popularity query
+-- version with a join to get the url and concat/distinct
+select a.artist, count(*) as c, group_concat(distinct i.url)
+from activity a
+join image i on a.image_id = i.id
+where a.dt >= '2019-05-01' and a.dt < '2019-06-01'
+group by a.artist
+order by c desc limit 20;
+
 -- a version that uses distinct to filter out a single
 -- track from a spotify playlist that i played 8 times
 -- XXX how do i do this?
+
+-- data for "daily listening" timeline display
+select artist, count(*) as c, avg(uts) as uts
+from activity
+where dt>='2019-05-28' and dt < '2019-05-29'
+group by artist order by c desc;
+
+-- doesn't work well when you listen to mixed playlists
+-- / needs a way to fill in cluster data for "empty" spots on the graph
+select strftime('%H', dt) as h, artist, dt
+from activity
+where dt>='2019-05-28' and dt < '2019-05-29'
+order by dt;
