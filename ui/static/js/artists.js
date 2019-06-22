@@ -1,3 +1,5 @@
+const artistDataUrl = "data/artists"
+
 document.addEventListener('DOMContentLoaded', (e) => {
 
     document.getElementById("daterange").addEventListener('change', e => {
@@ -16,7 +18,7 @@ window.populatePageCount = 0;
 function populatePage(timePeriod) {
 
     // populate artist table with results of api call
-    let p1 = fetch('data/artists.json')
+    let p1 = fetch(artistDataUrl)
         .then(response => response.json())
         .then(data => {
             console.log(`got ${data.length} artists from json call`)

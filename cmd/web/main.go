@@ -11,9 +11,13 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", index)
 
-	mux.HandleFunc("/recent", recent)
-	mux.HandleFunc("/monthly", monthly)
-	mux.HandleFunc("/artists", artists)
+	mux.HandleFunc("/recent", recentPage)
+	mux.HandleFunc("/monthly", monthlyPage)
+	mux.HandleFunc("/artists", artistsPage)
+
+	mux.HandleFunc("/data/artists", artistsData)
+	mux.HandleFunc("/data/monthlyArtists", monthlyArtistData)
+	mux.HandleFunc("/data/monthlyTracks", monthlyTrackData)
 
 	// set up static file server to ignore /ui/static/ prefix
 	fileServer := http.FileServer(http.Dir("./ui/static/"))

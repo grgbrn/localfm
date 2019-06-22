@@ -1,3 +1,6 @@
+const monthlyTrackUrl = "/data/monthlyTracks"
+const monthlyArtistUrl = "/data/monthlyArtists"
+
 document.addEventListener('DOMContentLoaded', (e) => {
 
     document.getElementById("daterange").addEventListener('change', e => {
@@ -16,7 +19,7 @@ window.populatePageCount = 0;
 function populatePage(timePeriod) {
 
     // populate track listview with results of api call
-    let p1 = fetch('data/monthly_track.json')
+    let p1 = fetch(monthlyTrackUrl)
         .then(response => response.json())
         .then(data => {
             console.log(`got ${data.length} tracks from json call`)
@@ -35,7 +38,7 @@ function populatePage(timePeriod) {
         });
 
     // populate new artist listview from api call
-    let p2 = fetch('data/monthly_artists.json')
+    let p2 = fetch(monthlyArtistUrl)
         .then(response => response.json())
         .then(data => {
             console.log(`got ${data.length} artists from json call`)
