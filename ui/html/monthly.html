@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+
+<head>
+  <title>localfm : Monthly</title>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" type="text/css" href="static/css/normalize.css" />
+  <link rel="stylesheet" type="text/css" href="static/css/localfm.css" />
+
+  <!-- chart deps -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.js"></script>
+</head>
+
+<body>
+  <!-- try putting template blocks first for now -->
+  <template id="trackrow_template">
+    <tr>
+      <td>TRACKNUM</td>
+      <td><img class="coverimg" src="" alt=""></td>
+      <td><em>TITLE</em><br><span>ARTIST</span></td>
+      <td>COUNT</td>
+    </tr>
+  </template>
+
+  <template id="artistrow_template">
+    <tr>
+      <td><img class="avatar" src="" alt=""></td>
+      <td><em>ARTIST</em><br><span>COUNT</span> tracks</td>
+    </tr>
+  </template>
+
+  <!-- begin visible page content -->
+
+  <div class="topnav">
+    <a href="/recent">Recent</a>
+    <a class="active" href="/monthly">Monthly</a>
+    <a href="/artists">Artists</a>
+    <a href="#about">About</a>
+  </div>
+
+  <div id="monthly-pagegrid">
+    <!-- combo title / dropdown selector -->
+    <div class="datebar">
+      <h3>Most Popular Tracks</h3>
+      <div class="push">Date Range:
+        <select name="daterange" id="daterange">
+          <option value="7d">Last 7 Days</option>
+          <option value="2w">Last 2 Weeks</option>
+          <option value="1m">Last Month</option>
+          <option value="3m">Last 3 Months</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- tracks tile -->
+    <div class="mtracks">
+      <table class="listview">
+        <!-- XXX how to put a "loading" message here? -->
+      </table>
+    </div>
+
+    <!-- chart tile (kind of ugly) -->
+    <div class="chartcontainer">
+      <canvas id="myChart"></canvas>
+    </div>
+
+    <!-- new artists tile -->
+    <div class="newartists">
+      <h3>New Artists</h3>
+      <table class="tinylist">
+        <!-- XXX also need a loading message here -->
+    </div>
+
+  </div>
+
+  <script src="static/js/monthly.js"></script>
+</body>
+
+</html>

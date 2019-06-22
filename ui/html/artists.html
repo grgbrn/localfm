@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+
+<head>
+  <title>localfm : Artists</title>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" type="text/css" href="static/css/normalize.css" />
+  <link rel="stylesheet" type="text/css" href="static/css/localfm.css" />
+</head>
+
+<body>
+  <!-- templates -->
+  <template id="artist_tile_template">
+    <div class="atile">
+      <img src="">
+      <div class="txt"><em>ARTIST</em><br><span>NUM</span> plays</div>
+    </div>
+  </template>
+
+  <!-- begin visible page content -->
+  <div class="topnav">
+    <a href="/recent">Recent</a>
+    <a href="/monthly">Monthly</a>
+    <a class="active" href="/artists">Artists</a>
+    <a href="#about">About</a>
+  </div>
+
+  <div id="artist-pagegrid">
+    <!-- combo title / dropdown selector -->
+    <div class="datebar">
+      <h3>Recent Artists</h3>
+      <div class="push">Date Range:
+        <select name="daterange" id="daterange">
+          <option value="7d">Last 7 Days</option>
+          <option value="2w">Last 2 Weeks</option>
+          <option value="1m">Last Month</option>
+          <option value="3m">Last 3 Months</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="gallery"></div>
+  </div>
+  <!-- end grid -->
+
+  <script src="static/js/artists.js"></script>
+</body>
+
+</html>

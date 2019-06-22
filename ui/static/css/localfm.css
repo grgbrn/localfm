@@ -1,0 +1,181 @@
+body {
+    font-size: 14px;
+    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+}
+
+/* component: recent/top tracks */
+
+table.listview {
+    line-height: 21px;
+    width: 100%;
+}
+
+.listview td {
+    padding: 0.25em;
+    padding-right: 2em;
+}
+
+.listview em {
+    font-style: normal;
+    font-weight: 700;
+}
+
+.coverimg {
+    width: 32px;
+    height: 32px;
+}
+
+/* component: new_artists */
+
+table.tinylist {
+    line-height: 21px;
+}
+
+.tinylist td {
+    padding: 0.25em;
+    padding-right: 2em;
+}
+
+.tinylist em {
+    font-style: normal;
+    font-weight: 700;
+}
+
+.avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+}
+
+/* component: artistgrid */
+
+.gallery {
+    display: grid;
+    grid-template-columns: repeat(4, 192px);
+    grid-column-gap: 2px;
+}
+
+.atile {
+    position: relative;
+    width: 192px;
+    height: 192px;
+}
+
+.atile img {
+    width: 192px;
+    height: 192px;
+}
+
+.atile .txt {
+    position: absolute;
+    bottom: 15px;
+    left: 15px;
+    font-size: 12px;
+    color: white;
+    line-height: 18px;
+    text-shadow: 0 0 10px rgba(0, 0, 0, .8);
+}
+
+.atile .txt em {
+    font-style: normal;
+    font-weight: 700;
+    font-size: 18px;
+}
+
+/* component: topnav
+   from https://www.w3schools.com/howto/howto_js_topnav.asp
+   XXX redo as part of flexbox/grid universe
+*/
+.topnav {
+    background-color: #333;
+    overflow: hidden;
+}
+
+.topnav a {
+    float: left;
+    color: #f2f2f2;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+    font-size: 17px;
+}
+
+.topnav a:hover {
+    background-color: #ddd;
+    color: black;
+}
+
+.topnav a.active {
+    background-color: rgb(9, 98, 133);
+    color: white;
+}
+
+/* component: timechart (not sure i want to keep this) */
+.chartcontainer {
+    width: 400px;
+}
+
+/* component: datebar */
+.datebar {
+    display: flex;
+}
+
+.push {
+    margin-left: auto;
+    margin-top: 1em;
+}
+
+/*  general concept:
+   - use classes for any reusable component thing
+   - use ids for unique/one-off page components / configurations
+   - each primary page have an id-specified main grid
+   - components will be placed on that grid using grid-area
+     that's valid only in the context of that grid
+*/
+
+/* layout: monthly page */
+#monthly-pagegrid {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    grid-column-gap: 50px;
+
+    grid-template-areas:
+        "db    .."
+        "main  chart"
+        "main  newart";
+}
+
+#monthly-pagegrid .datebar {
+    grid-area: db;
+}
+
+#monthly-pagegrid .mtracks {
+    grid-area: main;
+}
+
+#monthly-pagegrid .newartists {
+    grid-area: newart;
+}
+
+#monthly-pagegrid .chartcontainer {
+    grid-area: chart;
+}
+
+/* layout: artist page */
+#artist-pagegrid {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    grid-column-gap: 10px;
+
+    grid-template-areas:
+        "db  .."
+        "gal ..";
+}
+
+#artist-pagegrid .datebar {
+    grid-area: db;
+}
+
+#artist-pagegrid .gallery {
+    grid-area: gal;
+}
