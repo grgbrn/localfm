@@ -1,4 +1,4 @@
-package localfm
+package model
 
 import (
 	"database/sql"
@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	// blank import just to load drivers
-	_ "github.com/mattn/go-sqlite3"
+	"bitbucket.org/grgbrn/localfm/pkg/util"
+
+	_ "github.com/mattn/go-sqlite3" // blank import just to load driver
 )
 
 type Artist struct {
@@ -267,12 +268,12 @@ func StoreActivity(db *sql.DB, tracks []TrackInfo) error {
 			break
 		}
 
-		uts, e := getParsedUTS(track)
+		uts, e := GetParsedUTS(track)
 		if e != nil {
 			fmt.Printf("error parsing UTS: %v\n", e)
 			break
 		}
-		dt, e := getParsedTime(track)
+		dt, e := GetParsedTime(track)
 		if e != nil {
 			fmt.Printf("error parsing time: %v\n", e)
 			break
@@ -410,7 +411,7 @@ func FlagDuplicates(db *sql.DB, since int64, diff int64) (int, error) {
 	// fmt.Println(update)
 	// fmt.Println(dupResult.DuplicateIDs)
 
-	updResult, err := tx.Exec(update, InterfaceSliceInt64(dupResult.DuplicateIDs)...)
+	updResult, err := tx.Exec(update, util.InterfaceSliceInt64(dupResult.DuplicateIDs)...)
 	if err != nil {
 		fmt.Printf("rolling back after error:%v\n", err)
 		tx.Rollback()

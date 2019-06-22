@@ -1,14 +1,18 @@
-package localfm
+package main
 
 import (
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	m "bitbucket.org/grgbrn/localfm/pkg/model"
+	"bitbucket.org/grgbrn/localfm/pkg/util"
 
 	"github.com/shkh/lastfm-go/lastfm"
 )
@@ -18,91 +22,6 @@ const checkpointFilename string = "checkpoint.json"
 // module globals
 var api *lastfm.Api
 var throttle <-chan time.Time
-
-// lastfm lib doesn't define useful sub-structs for it's
-// result types, so do it myself...
-// XML annotations aren't necessary but required for types to match
-type TrackInfo struct {
-	NowPlaying string `xml:"nowplaying,attr,omitempty"`
-	Artist     struct {
-		Name string `xml:",chardata"`
-		Mbid string `xml:"mbid,attr"`
-	} `xml:"artist"`
-	Name       string `xml:"name"`
-	Streamable string `xml:"streamable"`
-	Mbid       string `xml:"mbid"`
-	Album      struct {
-		Name string `xml:",chardata"`
-		Mbid string `xml:"mbid,attr"`
-	} `xml:"album"`
-	Url    string `xml:"url"`
-	Images []struct {
-		Size string `xml:"size,attr"`
-		Url  string `xml:",chardata"`
-	} `xml:"image"`
-	Date struct {
-		Uts  string `xml:"uts,attr"`
-		Date string `xml:",chardata"`
-	} `xml:"date"`
-}
-
-// XXX maybe this is overkill, just choose the last one for now
-var trackInfoImageWeights = map[string]int{
-	"small":      1,
-	"medium":     2,
-	"large":      3,
-	"extralarge": 4,
-}
-
-func getParsedUTS(ti TrackInfo) (int64, error) {
-	epoch, err := strconv.Atoi(ti.Date.Uts)
-	if err != nil {
-		return 0, err
-	}
-	return int64(epoch), nil
-}
-
-// getParsedTime returns a time.Time object in UTC
-func getParsedTime(ti TrackInfo) (time.Time, error) {
-	var t time.Time
-	uts, err := getParsedUTS(ti)
-	if err != nil {
-		return t, err
-	}
-	return time.Unix(uts, 0).UTC(), nil
-}
-
-func printTrack(t TrackInfo) {
-	var dateSuffix string
-	if t.NowPlaying == "true" {
-		dateSuffix = "(current)"
-	} else {
-		epoch, err := getParsedUTS(t)
-		if err != nil {
-			dateSuffix = "[ERR]"
-		} else {
-			// tmp := time.Unix(epoch, 0)
-			dateSuffix = fmt.Sprintf("[%d] %s", epoch, t.Date.Date)
-		}
-	}
-	fmt.Printf("%s - %s %s\n", t.Name, t.Artist.Name, dateSuffix)
-}
-
-// ChooseImageURL selects the best quality image url from a list of choices in a TrackInfo
-func ChooseImageURL(t TrackInfo) string {
-
-	var best int
-	var url string
-
-	for _, s := range t.Images {
-		v, _ := trackInfoImageWeights[s.Size]
-		if v > best {
-			best = v
-			url = s.Url
-		}
-	}
-	return url
-}
 
 type traversalState struct {
 	User     string
@@ -126,13 +45,13 @@ func (ts traversalState) isComplete() bool {
 
 // processResponse finds the max uts in a response, filters out the "now playing"
 // track (if any) and coerces remote API responses into local TrackInfo interface
-func processResponse(recentTracks lastfm.UserGetRecentTracks) (int64, []TrackInfo) {
+func processResponse(recentTracks lastfm.UserGetRecentTracks) (int64, []m.TrackInfo) {
 	var maxUTS int64
-	tracks := make([]TrackInfo, 0)
+	tracks := make([]m.TrackInfo, 0)
 
 	for _, track := range recentTracks.Tracks {
 		if track.NowPlaying != "true" {
-			tmp, _ := getParsedUTS(track)
+			tmp, _ := m.GetParsedUTS(track)
 			if tmp > maxUTS {
 				maxUTS = tmp
 			}
@@ -144,13 +63,13 @@ func processResponse(recentTracks lastfm.UserGetRecentTracks) (int64, []TrackInf
 }
 
 // get the next page of responses, given a previous state
-func getNextTracks(current traversalState) (traversalState, []TrackInfo, error) {
+func getNextTracks(current traversalState) (traversalState, []m.TrackInfo, error) {
 
 	if current.isComplete() {
 		panic("getNextTracks called on a completed state")
 	}
 
-	tracks := []TrackInfo{}
+	tracks := []m.TrackInfo{}
 	nextState := traversalState{
 		User:     current.User,
 		Database: current.Database,
@@ -238,6 +157,18 @@ func resumeCheckpoint() (traversalState, error) {
 	return newState, nil
 }
 
+func main() {
+
+	delayPtr := flag.Int("delay", 5, "Delay in seconds between API calls")
+	limitPtr := flag.Int("limit", 0, "Limit number of API calls")
+
+	dupePtr := flag.Bool("duplicates", false, "Check entire database for duplicates")
+
+	flag.Parse()
+
+	Main(*delayPtr, *limitPtr, *dupePtr)
+}
+
 func Main(apiThrottleDelay int, requestLimit int, checkAllDuplicates bool) {
 	var err error
 
@@ -265,13 +196,13 @@ func Main(apiThrottleDelay int, requestLimit int, checkAllDuplicates bool) {
 	}
 
 	// this seemingly never returns an error
-	db, err = InitDB(dbPath)
+	db, err = m.InitDB(dbPath)
 	if err != nil {
 		panic("Can't open database [1]")
 	}
 
 	// returns err on nonexistent/corrupt db, zero val on empty db
-	latestDBTime, err := FindLatestTimestamp(db)
+	latestDBTime, err := m.FindLatestTimestamp(db)
 	if err != nil {
 		panic("Can't open database [2]")
 	}
@@ -357,7 +288,7 @@ func Main(apiThrottleDelay int, requestLimit int, checkAllDuplicates bool) {
 				fmt.Println("Giving up after max retries")
 				break
 			} else {
-				backoff := Pow(2, errCount+1)
+				backoff := util.Pow(2, errCount+1)
 				fmt.Printf("Retrying in %d seconds\n", backoff)
 				time.Sleep(time.Duration(backoff) * time.Second)
 				continue
@@ -368,7 +299,7 @@ func Main(apiThrottleDelay int, requestLimit int, checkAllDuplicates bool) {
 
 		// XXX review error handling here
 		fmt.Printf("* got %d tracks\n", len(tracks))
-		err = StoreActivity(db, tracks)
+		err = m.StoreActivity(db, tracks)
 		if err != nil {
 			fmt.Println("error saving tracks!")
 			fmt.Println(err)
@@ -413,7 +344,7 @@ func Main(apiThrottleDelay int, requestLimit int, checkAllDuplicates bool) {
 				since = latestDBTime
 			}
 
-			_, err = FlagDuplicates(db, since, int64(duplicateThresholdInt))
+			_, err = m.FlagDuplicates(db, since, int64(duplicateThresholdInt))
 			if err != nil {
 				fmt.Printf("Warning! problem flagging duplicates: %v\n", err)
 			}

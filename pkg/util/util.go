@@ -1,4 +1,4 @@
-package localfm
+package util
 
 // Pow does simple integer exponentiation
 // "a**b" in some other languages
