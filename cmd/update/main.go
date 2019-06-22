@@ -134,13 +134,8 @@ func writeCheckpoint(path string, state traversalState) error {
 	return nil
 }
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
-}
-
 func checkpointExists() bool {
-	return fileExists(checkpointFilename)
+	return util.FileExists(checkpointFilename)
 }
 
 func resumeCheckpoint() (traversalState, error) {
@@ -191,7 +186,7 @@ func Main(apiThrottleDelay int, requestLimit int, checkAllDuplicates bool) {
 	// sqlite database drivers will automatically create empty databases
 	// if the file doesn't exist, so stat the file first and abort
 	// if there's no database (must be manually created with schema)
-	if !fileExists(dbPath) {
+	if !util.FileExists(dbPath) {
 		panic("Can't open database [0]")
 	}
 

@@ -1,5 +1,12 @@
 package util
 
+import "os"
+
+func FileExists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
+}
+
 // Pow does simple integer exponentiation
 // "a**b" in some other languages
 func Pow(a, b int) int {
