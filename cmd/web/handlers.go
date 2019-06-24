@@ -5,7 +5,8 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"strings"
+
+	"bitbucket.org/grgbrn/localfm/pkg/query"
 )
 
 func renderTemplate(w http.ResponseWriter, tmpl string) {
@@ -58,46 +59,19 @@ func artistsPage(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, "artists")
 }
 
-type artistResult struct {
-	Name      string   `json:"artist"`
-	Count     int      `json:"count"`
-	ImageURLs []string `json:"urls"`
-}
-
 // json data handlers
 func (app *application) artistsData(w http.ResponseWriter, r *http.Request) {
-
-	query := `select a.artist, count(*) as c, group_concat(distinct i.url)
-	from activity a
-	join image i on a.image_id = i.id
-	where a.dt >= ? and a.dt < ?
-	group by a.artist
-	order by c desc limit ?;`
 
 	// XXX need correct parameters here
 	start := "2019-06-01"
 	end := "2019-07-01"
 	lim := 20
 
-	rows, err := app.db.Query(query, start, end, lim)
+	artists, err := query.Artists(app.db, start, end, lim)
 	if err != nil {
-		panic("handle an error") // XXX
-	}
-	defer rows.Close()
-
-	var artists []artistResult
-
-	for rows.Next() {
-		groupConcat := ""
-		res := artistResult{}
-
-		err = rows.Scan(&res.Name, &res.Count, &groupConcat)
-		if err != nil {
-			panic("handle an error") // XXX
-		}
-
-		res.ImageURLs = strings.Split(groupConcat, ",")
-		artists = append(artists, res)
+		// XXX not sure i want to expose the error string here
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	renderJSON(w, http.StatusOK, artists)
