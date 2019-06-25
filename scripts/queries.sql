@@ -75,3 +75,13 @@ from activity
 group by artist
 order by plays desc
 limit 20;
+
+
+-- query:LISTENING_CLOCK
+-- params: STARTDATE, ENDDATE, TOPN
+-- collect play counts by hour over a time period
+select strftime('%H', dt) as hour, count(*) as c
+from activity
+where dt >= '2019-04-01' and dt < '2019-05-01'
+group by 1
+order by 1;

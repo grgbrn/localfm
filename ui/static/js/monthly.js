@@ -1,5 +1,6 @@
 const monthlyTrackUrl = "/data/monthlyTracks"
 const monthlyArtistUrl = "/data/monthlyArtists"
+const listeningClockUrl = "/data/listeningClock"
 
 document.addEventListener('DOMContentLoaded', (e) => {
 
@@ -57,24 +58,35 @@ function populatePage(timePeriod) {
         });
 
     // populate listening clock
-    // XXX this data should theoretically come from fake json call too
-    var ctx = document.getElementById('myChart');
-    currentValues = [6, 4, 1, 2, 11, 6, 4, 2, 28, 73, 116, 113, 100, 69, 81, 79, 79, 46, 19, 36, 36, 25, 19, 1];
-    averageValues = [7, 4, 9, 8, 4, 3, 21, 18, 22, 47, 36, 51, 59, 63, 79, 83, 123, 120, 87, 77, 90, 87, 65, 25];
+    // this requires time zone data even more than other queries
+    // XXX need to pass this
+    let tzname = Intl.DateTimeFormat().resolvedOptions().timeZone
+    console.log(`querying listening data for tz:${tzname}`)
 
-    if (window.populatePageCount % 2 == 1) {
-        currentValues = currentValues.reverse()
-        averageValues = averageValues.reverse()
-    }
+    let p3 = fetch(listeningClockUrl)
+        .then(response => response.json())
+        .then(data => {
+            console.log(`got ${data.length} hours from json call`)
 
-    populateListeningClock(ctx,
-        'Apr 2019 Listening Clock',
-        currentValues,
-        averageValues);
+            console.log(data)
+
+            var ctx = document.getElementById('myChart');
+            currentValues = data.map(x => x.count)
+            averageValues = data.map(x => x.avgCount)
+
+            populateListeningClock(ctx,
+                'Apr 2019 Listening Clock', // XXX
+                currentValues,
+                averageValues);
+        })
+        .catch(error => {
+            console.log("!!! error getting listening clock data")
+            console.log(error)
+        });
 
     // to avoid race, wait for both data loading promises to complete
     // before incrementing our hacky demo counter
-    Promise.all([p1, p2]).then(vals => {
+    Promise.all([p1, p2, p3]).then(vals => {
         console.log("populatePage completed")
         window.populatePageCount += 1;
     })

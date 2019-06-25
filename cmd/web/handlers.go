@@ -110,3 +110,15 @@ func (app *application) monthlyTrackData(w http.ResponseWriter, r *http.Request)
 
 	renderJSON(w, http.StatusOK, artists)
 }
+
+func (app *application) listeningClockData(w http.ResponseWriter, r *http.Request) {
+
+	clock, err := query.ListeningClock(app.db, 4, 2019) // XXX need correct params
+	if err != nil {
+		// XXX not sure i want to expose the error string here
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	renderJSON(w, http.StatusOK, clock)
+}
