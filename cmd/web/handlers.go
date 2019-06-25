@@ -95,5 +95,18 @@ func (app *application) monthlyArtistData(w http.ResponseWriter, r *http.Request
 }
 
 func (app *application) monthlyTrackData(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "./ui/static/data/monthly_track.json")
+
+	// XXX need correct parameters here
+	start := "2019-06-01"
+	end := "2019-07-01"
+	lim := 20
+
+	artists, err := query.TopTracks(app.db, start, end, lim)
+	if err != nil {
+		// XXX not sure i want to expose the error string here
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	renderJSON(w, http.StatusOK, artists)
 }

@@ -5,10 +5,57 @@ import (
 	"strings"
 )
 
+// XXX add rank here for consistency?
 type ArtistResult struct {
 	Name      string   `json:"artist"`
 	PlayCount int      `json:"count"` // XXX rename in json also
 	ImageURLs []string `json:"urls"`
+}
+
+type TrackResult struct {
+	Rank      int      `json:"rank"`
+	Artist    string   `json:"artist"`
+	Title     string   `json:"title"`
+	PlayCount int      `json:"count"`
+	ImageURLs []string `json:"urls"`
+}
+
+// TopTracks finds the most popular tracks by play count over
+// a bounded time period
+// XXX start & end should probably be time.Time?
+func TopTracks(db *sql.DB, start string, end string, limit int) ([]TrackResult, error) {
+	var tracks []TrackResult
+
+	query := `select a.artist, a.title, count(*) as plays, group_concat(distinct i.url)
+	from activity a
+	left join image i on a.image_id = i.id
+	where a.dt >= ? and a.dt < ?
+	group by a.artist, a.title
+	order by plays desc limit ?;`
+
+	rows, err := db.Query(query, start, end, limit)
+	if err != nil {
+		return tracks, err
+	}
+	defer rows.Close()
+
+	i := 0
+	for rows.Next() {
+		i++
+		groupConcat := ""
+		res := TrackResult{}
+
+		err = rows.Scan(&res.Artist, &res.Title, &res.PlayCount, &groupConcat)
+		if err != nil {
+			return tracks, err
+		}
+
+		res.Rank = i
+		res.ImageURLs = strings.Split(groupConcat, ",")
+		tracks = append(tracks, res)
+	}
+
+	return tracks, nil
 }
 
 // TopArtists finds the most popular artists by play count over

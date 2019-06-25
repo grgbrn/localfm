@@ -87,7 +87,7 @@ function populateTrackList(tableDom, trackData) {
         var clone = document.importNode(tmpl.content, true);
         var td = clone.querySelectorAll("td");
         td[0].textContent = dat.rank;
-        td[1].children[0].src = dat.imageUrl; // XXX maybe too fragile to template edits
+        td[1].children[0].src = randElt(dat.urls);
         td[2].children[0].textContent = dat.title;
         td[2].children[2].textContent = dat.artist;
         td[3].textContent = dat.count;

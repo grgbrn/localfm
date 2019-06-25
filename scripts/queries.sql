@@ -1,3 +1,14 @@
+-- query:TOP_TRACKS
+-- params: STARTDATE, ENDDATE, TOPN
+-- find the most popular tracks for a time period
+select a.artist, a.title, count(*) as plays, group_concat(distinct i.url)
+from activity a
+left join image i on a.image_id = i.id
+where a.dt >= '2019-04-01' and a.dt < '2019-05-01'
+group by a.artist, a.title
+order by plays desc limit 20;
+
+
 -- query:TOP_ARTISTS
 -- params: STARTDATE, ENDDATE, TOPN
 -- find the most popular artists for a time period
