@@ -103,7 +103,7 @@ function populateArtistList(tableDom, artistData) {
         var clone = document.importNode(tmpl.content, true);
         var td = clone.querySelectorAll("td");
         // XXX this style of child ref may be too fragile
-        td[0].children[0].src = dat.imageUrl;
+        td[0].children[0].src = randElt(dat.urls);
         td[1].children[0].textContent = dat.artist;
         td[1].children[2].textContent = dat.count;
 
@@ -174,4 +174,8 @@ function empty(domElt) {
     while (domElt.firstChild) {
         domElt.removeChild(domElt.firstChild);
     }
+}
+
+function randElt(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
 }

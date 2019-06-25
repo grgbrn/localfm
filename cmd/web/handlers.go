@@ -60,6 +60,7 @@ func artistsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // json data handlers
+// XXX rename these handlers to match the new query names
 func (app *application) artistsData(w http.ResponseWriter, r *http.Request) {
 
 	// XXX need correct parameters here
@@ -67,7 +68,7 @@ func (app *application) artistsData(w http.ResponseWriter, r *http.Request) {
 	end := "2019-07-01"
 	lim := 20
 
-	artists, err := query.Artists(app.db, start, end, lim)
+	artists, err := query.TopArtists(app.db, start, end, lim)
 	if err != nil {
 		// XXX not sure i want to expose the error string here
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -78,7 +79,19 @@ func (app *application) artistsData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) monthlyArtistData(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "./ui/static/data/monthly_artists.json")
+	// XXX need correct parameters here
+	start := "2019-06-01"
+	end := "2019-07-01"
+	lim := 20
+
+	artists, err := query.TopNewArtists(app.db, start, end, lim)
+	if err != nil {
+		// XXX not sure i want to expose the error string here
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	renderJSON(w, http.StatusOK, artists)
 }
 
 func (app *application) monthlyTrackData(w http.ResponseWriter, r *http.Request) {
