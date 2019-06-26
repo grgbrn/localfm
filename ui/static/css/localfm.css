@@ -116,10 +116,33 @@ table.tinylist {
 }
 
 /* component: datebar */
-.datebar {
+.datebar-controls {
     display: flex;
+    justify-content: space-between;
+    align-items: baseline;
 }
 
+.datebar-controls a {
+    text-decoration: none;
+    color:inherit;
+}
+
+.datebar-title {
+    padding-top: 8px;
+    padding-bottom: 8px;
+    font-size: 1.2em;
+    font-weight: 700;
+}
+
+#datebar-title-dat {
+    font-weight: 400;
+}
+
+.dbg {
+    background-color: hotpink;
+}
+
+/* can be removed i think? */
 .push {
     margin-left: auto;
     margin-top: 1em;

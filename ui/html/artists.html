@@ -26,22 +26,34 @@
   </div>
 
   <div id="artist-pagegrid">
-    <!-- combo title / dropdown selector -->
+    <!-- combo title / date control -->
     <div class="datebar">
-      <h3>Recent Artists</h3>
-      <div class="push">Date Range:
-        <select name="daterange" id="daterange">
-          <option value="7d">Last 7 Days</option>
-          <option value="2w">Last 2 Weeks</option>
-          <option value="1m">Last Month</option>
-          <option value="3m">Last 3 Months</option>
-        </select>
+      <div class="datebar-title">
+        Recent Artists: <span id="datebar-title-label">Apr 2019</span>
+      </div>
+      <div class="datebar-controls">
+        <div>
+          <a id="prevlink" href="#">&#8592; Previous <span id="datebar-prev-label">Month</span></a>
+        </div>
+
+        <div>Show
+          <select name="daterange" id="daterange">
+            <option value="week">Week</option>
+            <option selected=1 value="month">Month</option>
+            <option value="year">Year</option>
+          </select>
+        </div>
+
+        <div>
+          <a id="nextlink" href="#">Next <span id="datebar-next-label">Month</span> &#8594;</a>
+        </div>
       </div>
     </div>
+  </div>
 
-    <div class="gallery">
-      <div>&nbsp;loading...</div>
-    </div>
+  <div class="gallery">
+    <div>&nbsp;loading...</div>
+  </div>
   </div>
   <!-- end grid -->
 
