@@ -53,8 +53,8 @@ func main() {
 	//
 	app := &application{
 		db:   db,
-		err:  errorLog,
 		info: infoLog,
+		err:  errorLog,
 	}
 
 	//
@@ -76,7 +76,14 @@ func main() {
 	fileServer := http.FileServer(http.Dir("./ui/static/"))
 	mux.Handle("/static/", http.StripPrefix("/static", fileServer))
 
-	log.Println("Starting server on :4000")
-	err = http.ListenAndServe(":4000", mux)
-	log.Fatal(err)
+	addr := ":4000" // XXX
+	srv := &http.Server{
+		Addr:     addr,
+		ErrorLog: app.err,
+		Handler:  app.logRequest(secureHeaders(mux)),
+	}
+
+	app.info.Printf("Starting server on %s\n", addr)
+	err = srv.ListenAndServe()
+	app.err.Fatal(err)
 }

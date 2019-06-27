@@ -7,11 +7,31 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"time"
 
 	"bitbucket.org/grgbrn/localfm/pkg/query"
 )
+
+const logStackTraces bool = false
+
+func (app *application) serverError(w http.ResponseWriter, err error) {
+	if logStackTraces {
+		// from "let's go" ch3.04
+		// XXX but this could use some tweaking
+		trace := fmt.Sprintf("%s\n%s", err.Error(), debug.Stack())
+		//app.err.Println(trace)
+		app.err.Output(2, trace)
+	} else {
+		app.err.Println(err.Error())
+	}
+
+	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+}
+
+// XXX maybe add a clientError also?
+// file:///home/greg/Downloads/lets-go/html/03.04-centralized-error-handling.html
 
 func renderTemplate(w http.ResponseWriter, tmpl string) {
 	templatePath := "./ui/html/" + tmpl + ".html"
@@ -134,8 +154,7 @@ func (app *application) topArtistsData(w http.ResponseWriter, r *http.Request) {
 
 	artists, err := query.TopArtists(app.db, dp.start, dp.end, dp.limit)
 	if err != nil {
-		// XXX not sure i want to expose the error string here
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		app.serverError(w, err)
 		return
 	}
 
@@ -150,8 +169,7 @@ func (app *application) monthlyArtistData(w http.ResponseWriter, r *http.Request
 
 	artists, err := query.TopNewArtists(app.db, start, end, lim)
 	if err != nil {
-		// XXX not sure i want to expose the error string here
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		app.serverError(w, err)
 		return
 	}
 
@@ -167,8 +185,7 @@ func (app *application) monthlyTrackData(w http.ResponseWriter, r *http.Request)
 
 	artists, err := query.TopTracks(app.db, start, end, lim)
 	if err != nil {
-		// XXX not sure i want to expose the error string here
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		app.serverError(w, err)
 		return
 	}
 
@@ -179,8 +196,7 @@ func (app *application) listeningClockData(w http.ResponseWriter, r *http.Reques
 
 	clock, err := query.ListeningClock(app.db, 4, 2019) // XXX need correct params
 	if err != nil {
-		// XXX not sure i want to expose the error string here
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		app.serverError(w, err)
 		return
 	}
 
