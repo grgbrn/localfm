@@ -67,6 +67,8 @@ function makeQuery(state) {
 
 function populatePage(state) {
 
+    let artistGallery = document.querySelector("div.gallery")
+
     // populate artist table with results of api call
     let p1 = fetch(artistDataUrl + makeQuery(state))
         .then(response => response.json())
@@ -74,13 +76,15 @@ function populatePage(state) {
             // console.log(`got ${data.length} artists from json call`)
             // console.log(data);
 
-            var artistGallery = document.querySelector("div.gallery")
             empty(artistGallery)
             populateArtistGallery(artistGallery, data)
         })
         .catch(error => {
+            // XXX what's best practice for catching non-200s?
             console.log("!!! error getting track data")
             console.log(error)
+            empty(artistGallery)
+            // XXX todo display error in-page
         });
 }
 
@@ -90,12 +94,19 @@ function populateArtistGallery(tableDom, artistData) {
     for (const dat of artistData) {
         var clone = document.importNode(tmpl.content, true);
         var div = clone.querySelector("div"); // XXX maybe just use children?
-        div.children[0].src = randElt(dat.urls)
+        div.children[0].src = selectCoverImage(dat.urls)
         div.children[1].children[0].textContent = dat.artist;
         div.children[1].children[2].textContent = dat.count;
 
         tableDom.appendChild(clone);
     }
+}
+
+function selectCoverImage(urls) {
+    if (!urls || urls.length == 0) {
+        return ""
+    }
+    return randElt(urls)
 }
 
 // jquery-like helpers
