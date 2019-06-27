@@ -1,10 +1,5 @@
 const artistDataUrl = "data/artists"
 
-// since there's only one set of data available for now, cheat
-// and just reverse the order of loaded data on each change
-// to simulate different data being returned from server
-window.populatePageCount = 0;
-
 // simple application state
 window.state = {
     offset: 0,     // how far back we are from the present
@@ -66,25 +61,22 @@ function updateControls(state) {
     }
 }
 
+function makeQuery(state) {
+    return `?mode=${state.mode}&offset=${state.offset}`
+}
+
 function populatePage(state) {
 
     // populate artist table with results of api call
-    let p1 = fetch(artistDataUrl)
+    let p1 = fetch(artistDataUrl + makeQuery(state))
         .then(response => response.json())
         .then(data => {
             // console.log(`got ${data.length} artists from json call`)
-
-            if (window.populatePageCount % 2 == 1) {
-                data = data.reverse();
-            }
-
             // console.log(data);
 
             var artistGallery = document.querySelector("div.gallery")
             empty(artistGallery)
             populateArtistGallery(artistGallery, data)
-
-            window.populatePageCount += 1
         })
         .catch(error => {
             console.log("!!! error getting track data")
