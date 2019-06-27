@@ -73,11 +73,11 @@ function populatePage(state) {
     let p1 = fetch(artistDataUrl + makeQuery(state))
         .then(response => response.json())
         .then(data => {
-            // console.log(`got ${data.length} artists from json call`)
             // console.log(data);
 
+            updateDataTitle(data)
             empty(artistGallery)
-            populateArtistGallery(artistGallery, data)
+            populateArtistGallery(artistGallery, data.artists)
         })
         .catch(error => {
             // XXX what's best practice for catching non-200s?
@@ -100,6 +100,24 @@ function populateArtistGallery(tableDom, artistData) {
 
         tableDom.appendChild(clone);
     }
+}
+
+function updateDataTitle(data) {
+    let label = ""
+
+    let date = new Date(data.startDate)
+    if (data.mode == "week") {
+        label = `${data.startDate} to ${data.endDate}`
+    } else if (data.mode == "month") {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+        label = `${monthNames[date.getMonth()]} ${date.getFullYear()}`
+    } else if (data.mode == "year") {
+        label = `${date.getFullYear()}`
+    }
+
+    let elt = document.getElementById("datebar-title-label")
+    elt.textContent = label
 }
 
 function selectCoverImage(urls) {

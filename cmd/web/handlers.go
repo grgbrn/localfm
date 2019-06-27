@@ -85,11 +85,15 @@ func artistsPage(w http.ResponseWriter, r *http.Request) {
 
 // many data handlers query over a date range
 type dateRangeParams struct {
+	mode  string
 	start string
 	end   string
 	limit int
 }
 
+// extractDateRangeParams translates mode=X&offset=Y parameters
+// from the URL query into start/end/lim parameters expected by
+// the query package
 func extractDateRangeParams(r *http.Request) (dateRangeParams, error) {
 
 	var params dateRangeParams
@@ -99,6 +103,7 @@ func extractDateRangeParams(r *http.Request) (dateRangeParams, error) {
 	if mode == "" {
 		return params, errors.New("missing required parameter: mode")
 	}
+	params.mode = mode
 
 	// required param: offset
 	offStr := r.URL.Query().Get("offset")
@@ -139,12 +144,19 @@ func extractDateRangeParams(r *http.Request) (dateRangeParams, error) {
 		return params, errors.New("invalid value for parameter: mode")
 	}
 
-	fmt.Println(params)
+	fmt.Println(params) // XXX
 	return params, nil
 }
 
 // json data handlers
 func (app *application) topArtistsData(w http.ResponseWriter, r *http.Request) {
+
+	type topArtistsResponse struct {
+		Mode      string               `json:"mode"`
+		StartDate string               `json:"startDate"`
+		EndDate   string               `json:"endDate"`
+		Artists   []query.ArtistResult `json:"artists"`
+	}
 
 	dp, err := extractDateRangeParams(r)
 	if err != nil {
@@ -158,7 +170,12 @@ func (app *application) topArtistsData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	renderJSON(w, http.StatusOK, artists)
+	renderJSON(w, http.StatusOK, topArtistsResponse{
+		Mode:      dp.mode,
+		StartDate: dp.start,
+		EndDate:   dp.end,
+		Artists:   artists,
+	})
 }
 
 func (app *application) monthlyArtistData(w http.ResponseWriter, r *http.Request) {
