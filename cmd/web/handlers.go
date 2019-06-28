@@ -178,35 +178,63 @@ func (app *application) topArtistsData(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (app *application) monthlyArtistData(w http.ResponseWriter, r *http.Request) {
-	// XXX need correct parameters here
-	start := "2019-06-01"
-	end := "2019-07-01"
-	lim := 20
+func (app *application) topNewArtistsData(w http.ResponseWriter, r *http.Request) {
 
-	artists, err := query.TopNewArtists(app.db, start, end, lim)
+	// xxx duplicate of topArtistsResponse
+	type topNewArtistsResponse struct {
+		Mode      string               `json:"mode"`
+		StartDate string               `json:"startDate"`
+		EndDate   string               `json:"endDate"`
+		Artists   []query.ArtistResult `json:"artists"`
+	}
+
+	dp, err := extractDateRangeParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	artists, err := query.TopNewArtists(app.db, dp.start, dp.end, dp.limit)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
-	renderJSON(w, http.StatusOK, artists)
+	renderJSON(w, http.StatusOK, topNewArtistsResponse{
+		Mode:      dp.mode,
+		StartDate: dp.start,
+		EndDate:   dp.end,
+		Artists:   artists,
+	})
 }
 
-func (app *application) monthlyTrackData(w http.ResponseWriter, r *http.Request) {
+func (app *application) topTracksData(w http.ResponseWriter, r *http.Request) {
 
-	// XXX need correct parameters here
-	start := "2019-06-01"
-	end := "2019-07-01"
-	lim := 20
+	type topTracksResponse struct {
+		Mode      string              `json:"mode"`
+		StartDate string              `json:"startDate"`
+		EndDate   string              `json:"endDate"`
+		Tracks    []query.TrackResult `json:"tracks"`
+	}
 
-	artists, err := query.TopTracks(app.db, start, end, lim)
+	dp, err := extractDateRangeParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	topTracks, err := query.TopTracks(app.db, dp.start, dp.end, dp.limit)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
-	renderJSON(w, http.StatusOK, artists)
+	renderJSON(w, http.StatusOK, topTracksResponse{
+		Mode:      dp.mode,
+		StartDate: dp.start,
+		EndDate:   dp.end,
+		Tracks:    topTracks,
+	})
 }
 
 func (app *application) listeningClockData(w http.ResponseWriter, r *http.Request) {

@@ -67,9 +67,9 @@ func main() {
 	mux.HandleFunc("/monthly", monthlyPage)
 	mux.HandleFunc("/artists", artistsPage)
 
-	mux.HandleFunc("/data/artists", app.topArtistsData)
-	mux.HandleFunc("/data/monthlyArtists", app.monthlyArtistData)
-	mux.HandleFunc("/data/monthlyTracks", app.monthlyTrackData)
+	mux.HandleFunc("/data/topArtists", app.topArtistsData)
+	mux.HandleFunc("/data/topNewArtists", app.topNewArtistsData)
+	mux.HandleFunc("/data/topTracks", app.topTracksData)
 	mux.HandleFunc("/data/listeningClock", app.listeningClockData)
 
 	// set up static file server to ignore /ui/static/ prefix

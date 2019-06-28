@@ -370,7 +370,7 @@ function initArtistPage() {
     // on that state
     // must be a function that retuns a promise / async fn
     function topArtists(state) {
-        const artistDataUrl = "data/artists"
+        const artistDataUrl = "data/topArtists"
         return fetch(artistDataUrl + makeQuery(state))
             .then(response => response.json())
     }
@@ -399,13 +399,13 @@ function initMonthlyPage() {
 
     // define data sources
     function topTracks(state) {
-        const monthlyTrackUrl = "/data/monthlyTracks"
+        const monthlyTrackUrl = "/data/topTracks"
         return fetch(monthlyTrackUrl + makeQuery(state))
             .then(response => response.json())
     }
 
     function topNewArtists(state) {
-        const monthlyArtistUrl = "/data/monthlyArtists"
+        const monthlyArtistUrl = "/data/topNewArtists"
         return fetch(monthlyArtistUrl + makeQuery(state))
             .then(response => response.json())
     }
