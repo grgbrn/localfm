@@ -5,29 +5,33 @@ corresponding JS for each component in the page
 
 */
 
-// simple application state
-// XXX figure out where this lives... probably in the Page?
-window.state = {
-    offset: 0,     // how far back we are from the present
-    mode: "month", // current display mode
-}
-
-
 // Page is a simple container for multiple widgets on a single page
+// xxx should probably also contain the state
 class Page {
-    constructor() {
-        self.widgets = []
+    constructor(initialState) {
+        this.widgets = []
+        this.state = initialState
     }
 
     addWidget(w) {
         console.log("adding widget:" + w)
-        self.widgets.push(w)
+        this.widgets.push(w)
     }
 
     updateState(newState) {
-        self.widgets.forEach(widget => {
+        for (let [key, val] of Object.entries(newState)) {
+            console.log(`updating ${key} = ${val}`)
+            this.state[key] = val
+        }
+
+        this.refreshWidgets()
+    }
+
+    // XXX not sure what happens here, really
+    refreshWidgets() {
+        this.widgets.forEach(widget => {
             // XXX should this return a promise or something?
-            widget.refresh(newState)
+            widget.refresh(this.state)
         });
     }
 }
@@ -38,26 +42,21 @@ class DateBar {
     }
 
     init() {
-        console.log("init DateBar")
         document.getElementById("prevlink").addEventListener('click', e => {
-            // XXX don't mutate global state here
-            // XXX don't even use global state here!
-            window.state.offset += 1
-            this.page.updateState(window.state)
+            this.page.updateState({
+                'offset': this.page.state.offset + 1
+            })
         })
 
         document.getElementById("nextlink").addEventListener('click', e => {
-            // XXX don't mutate global state here
-            // XXX don't even use global state here!
-            window.state.offset += 1
-            this.page.updateState(window.state)
+            this.page.updateState({
+                'offset': this.page.state.offset - 1
+            })
         })
 
         document.getElementById("daterange").addEventListener('change', e => {
 
-            // XXSTATE
             console.log("date mode was changed:" + e.target.value)
-            window.state.mode = e.target.value
             /*
             XXX how to change offset value when switching between modes???
 
@@ -65,12 +64,11 @@ class DateBar {
             going from month->week it would display first month of the week?
 
             for now, just reset to 0 which isn't great...
-
             */
-            window.state.offset = 0
-            console.log(this)
-
-            this.page.updateState(window.state)
+            this.page.updateState({
+                'mode': e.target.value,
+                'offset': 0
+            })
         })
     }
 
@@ -103,6 +101,7 @@ class ArtistGrid {
         let artistGallery = document.querySelector("div.gallery")
 
         // populate artist table with results of api call
+        // XXX api call does not belong here at all!!!!
         let p1 = fetch(artistDataUrl + makeQuery(state))
             .then(response => response.json())
             .then(data => {
@@ -192,7 +191,12 @@ function capitalize(s) {
 // specific init for artists page
 document.addEventListener('DOMContentLoaded', (e) => {
     console.log("artist page init")
-    let page = new Page()
+
+    // init new page with initial state
+    let page = new Page({
+        offset: 0,     // how far back we are from the present
+        mode: "month", // current display mode
+    })
 
     let db = new DateBar(page)
     db.init()
@@ -202,5 +206,5 @@ document.addEventListener('DOMContentLoaded', (e) => {
     ag.init()
     page.addWidget(ag)
 
-    page.updateState(window.state)
+    page.refreshWidgets()
 })
