@@ -1,38 +1,96 @@
 /*
 
 attempt at a combined JS file for local.fm, coming up with
-corresponding JS for each component in the page
+corresponding JS for each widget in the page
+
+main update flow, in the general style of Elm
+
+state -> data -> refresh widgets -> state updates
+
+our state is very simple, really just represents what the
+view is displaying without the data (should be stored in the
+url hash) but is used to fetch remote data which is displayed
+by the widgets
+
+this model only really seems sensible for apps with limited
+interactivity - remote data browsers like this one
+
+updates to the state are caused by ui clicks
+
+this triggers remote data to be fetched by a datasource function
+which then refreshes all widgets that depend on that data
 
 */
 
 // Page is a simple container for multiple widgets on a single page
-// xxx should probably also contain the state
 class Page {
     constructor(initialState) {
         this.widgets = []
         this.state = initialState
+
+        // holds a map of DataSources -> widgets
+        // XXX wouldn't typescript be nice here
+        this.deps = new Map()
     }
 
-    addWidget(w) {
+    addWidget(w, dataDeps) {
+        // store datasource -> [widget...]
+        // in the page map of data dependencies
+        for (let dep of dataDeps) {
+            if (!this.deps.has(dep)) {
+                this.deps.set(dep, [])
+            }
+            this.deps.get(dep).push(w)
+        }
+        console.log(this.deps)
         console.log("adding widget:" + w)
         this.widgets.push(w)
     }
 
+    // call each registered datasource function and pass
+    // the results to each widget that depends on it
+    refreshData() {
+        console.log("refreshing data for state:")
+        console.log(this.state)
+
+        for (let [fn, widgets] of this.deps) {
+            console.log("updating source:")
+            console.log(fn)
+            console.log(widgets)
+
+            let p = fn(this.state)
+            p.then(data => {
+                console.log("got data")
+                console.log(data)
+                for (let w of widgets) {
+                    try {
+                        w.refresh(this.state, data)
+                    } catch (err) {
+                        // XXX this is an internal error thrown by a widget?
+                        console.log("error refreshing widget:")
+                        console.log(w)
+                        console.log(err)
+                    }
+                }
+            }).catch(e => {
+                // XXX error fetching remote data
+                // XXX need to invalidate the widget
+                console.log("datasource error")
+                console.log(e)
+            })
+        }
+    }
+
+    // update keys in the state. any key not passed will
+    // be left unchanged
     updateState(newState) {
         for (let [key, val] of Object.entries(newState)) {
             console.log(`updating ${key} = ${val}`)
             this.state[key] = val
         }
 
-        this.refreshWidgets()
-    }
-
-    // XXX not sure what happens here, really
-    refreshWidgets() {
-        this.widgets.forEach(widget => {
-            // XXX should this return a promise or something?
-            widget.refresh(this.state)
-        });
+        // call all datasources with new state
+        this.refreshData()
     }
 }
 
@@ -72,9 +130,11 @@ class DateBar {
         })
     }
 
-    refresh(state) {
-        console.log("refreshing datebar with state:")
+    // xxx call this update instead?
+    refresh(state, data) {
+        console.log("refreshing datebar")
         console.log(state)
+        console.log(data)
 
         // set link labels
         let controlLabel = capitalize(state.mode)
@@ -87,58 +147,11 @@ class DateBar {
         } else {
             document.getElementById("nextlink").style.visibility = "";
         }
-    }
-}
 
-class ArtistGrid {
-    constructor(page) {
-        this.page = page
-    }
-    init() {
-        // no event handlers, so nothing necessary
-    }
-    refresh(state) {
-        let artistGallery = document.querySelector("div.gallery")
-
-        // populate artist table with results of api call
-        // XXX api call does not belong here at all!!!!
-        let p1 = fetch(artistDataUrl + makeQuery(state))
-            .then(response => response.json())
-            .then(data => {
-                console.log(data);
-
-                // xxx this is kind of like state update?
-                // YYUPDATE(maybe)
-                this.updateDataTitle(data)
-                empty(artistGallery)
-                this.populateArtistGallery(artistGallery, data.artists)
-            })
-            .catch(error => {
-                // XXX what's best practice for catching non-200s?
-                // YYUPDATE(maybe)
-                console.log("!!! error getting track data")
-                console.log(error)
-                empty(artistGallery)
-            });
+        this.updateTitle(data)
     }
 
-    // internal methods
-    populateArtistGallery(tableDom, artistData) {
-        const tmpl = document.querySelector("#artist_tile_template")
-
-        for (const dat of artistData) {
-            var clone = document.importNode(tmpl.content, true);
-            var div = clone.querySelector("div"); // XXX maybe just use children?
-            div.children[0].src = selectCoverImage(dat.urls)
-            div.children[1].children[0].textContent = dat.artist;
-            div.children[1].children[2].textContent = dat.count;
-
-            tableDom.appendChild(clone);
-        }
-    }
-
-    // XXX this one is problematic because it updates the DateBar
-    updateDataTitle(data) {
+    updateTitle(data) {
         let label = ""
 
         let date = new Date(data.startDate)
@@ -157,11 +170,84 @@ class ArtistGrid {
     }
 }
 
+class ArtistGrid {
+    constructor(page) {
+        this.page = page
+    }
+    init() {
+        // no event handlers, so nothing necessary
+    }
+    refresh(state, data) {
+        console.log("refreshing ArtistGrid")
+        console.log(state)
+        console.log(data)
+
+        let artistGallery = document.querySelector("div.gallery")
+        empty(artistGallery)
+        this.populateArtistGallery(artistGallery, data.artists)
+
+        // XXX this belongs in an error handler
+        // .catch(error => {
+        //     // XXX what's best practice for catching non-200s?
+        //     // YYUPDATE(maybe)
+        //     console.log("!!! error getting track data")
+        //     console.log(error)
+        //     empty(artistGallery)
+        // });
+    }
+
+    // internal methods
+    populateArtistGallery(tableDom, artistData) {
+        const tmpl = document.querySelector("#artist_tile_template")
+
+        for (const dat of artistData) {
+            var clone = document.importNode(tmpl.content, true);
+            var div = clone.querySelector("div"); // XXX maybe just use children?
+            div.children[0].src = selectCoverImage(dat.urls)
+            div.children[1].children[0].textContent = dat.artist;
+            div.children[1].children[2].textContent = dat.count;
+
+            tableDom.appendChild(clone);
+        }
+    }
+}
+
+// specific init for artists page
+document.addEventListener('DOMContentLoaded', (e) => {
+    console.log("artist page init")
+
+    // init new page with initial state
+    let page = new Page({
+        offset: 0,     // how far back we are from the present
+        mode: "month", // current display mode
+    })
+
+    // define data sources that retrieve external data based
+    // on that state
+    // must be a function that retuns a promise / async fn
+    function topArtists(state) {
+        const artistDataUrl = "data/artists"
+        return fetch(artistDataUrl + makeQuery(state))
+            .then(response => response.json())
+    }
+
+    // define widgets that depend on those data sources
+    // XXX this is a bit too verbose
+    let db = new DateBar(page)
+    db.init()
+    page.addWidget(db, [topArtists])
+
+    let ag = new ArtistGrid()
+    ag.init()
+    page.addWidget(ag, [topArtists])
+
+    // do the initial data refresh, which will cause the
+    // widgets to be updated with newly fetched data
+    page.refreshData()
+})
 
 
 /// xxx junk drawer
-const artistDataUrl = "data/artists"
-
 function makeQuery(state) {
     return `?mode=${state.mode}&offset=${state.offset}`
 }
@@ -187,24 +273,3 @@ function randElt(arr) {
 function capitalize(s) {
     return s && s[0].toUpperCase() + s.slice(1);
 }
-
-// specific init for artists page
-document.addEventListener('DOMContentLoaded', (e) => {
-    console.log("artist page init")
-
-    // init new page with initial state
-    let page = new Page({
-        offset: 0,     // how far back we are from the present
-        mode: "month", // current display mode
-    })
-
-    let db = new DateBar(page)
-    db.init()
-    page.addWidget(db)
-
-    let ag = new ArtistGrid()
-    ag.init()
-    page.addWidget(ag)
-
-    page.refreshWidgets()
-})
