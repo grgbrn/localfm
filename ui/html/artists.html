@@ -6,6 +6,7 @@
   <meta charset="utf-8" />
   <link rel="stylesheet" type="text/css" href="static/css/normalize.css" />
   <link rel="stylesheet" type="text/css" href="static/css/localfm.css" />
+  <script src="static/js/localfm.js"></script>
 </head>
 
 <body>
@@ -57,7 +58,11 @@
   </div>
   <!-- end grid -->
 
-  <script src="static/js/localfm.js"></script>
+  <script type="text/javascript">
+    document.addEventListener('DOMContentLoaded', (e) => {
+      initArtistPage()
+    })
+  </script>
 </body>
 
 </html>

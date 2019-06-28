@@ -212,10 +212,154 @@ class ArtistGrid {
     }
 }
 
-// specific init for artists page
-document.addEventListener('DOMContentLoaded', (e) => {
-    console.log("artist page init")
+class TrackList {
+    constructor(page) {
+        this.page = page
+    }
+    init() {
+        // no event handlers, so nothing necessary
+    }
+    refresh(state, data) {
+        console.log("refreshing TrackList")
+        console.log(state)
+        console.log(data)
 
+        var trackListTable = document.querySelector("table.listview")
+        empty(trackListTable)
+        this.populateTrackList(trackListTable, data.tracks)
+    }
+
+    // internal
+    populateTrackList(tableDom, trackData) {
+        const tmpl = document.querySelector("#trackrow_template")
+
+        for (const dat of trackData) {
+            var clone = document.importNode(tmpl.content, true);
+            var td = clone.querySelectorAll("td");
+            td[0].textContent = dat.rank;
+            td[1].children[0].src = randElt(dat.urls);
+            td[2].children[0].textContent = dat.title;
+            td[2].children[2].textContent = dat.artist;
+            td[3].textContent = dat.count;
+
+            tableDom.appendChild(clone);
+        }
+    }
+}
+
+class ListeningClock {
+    constructor(page) {
+        this.page = page
+    }
+    refresh(state, data) {
+        console.log("refreshing ListeningClock")
+        console.log(state)
+        console.log(data)
+
+        console.log(`got ${data.length} hours from json call`)
+
+        var ctx = document.getElementById('myChart');
+        let currentValues = data.map(x => x.count)
+        let averageValues = data.map(x => x.avgCount)
+
+        this.populateListeningClock(ctx,
+            'Apr 2019 Listening Clock', // XXX
+            currentValues,
+            averageValues);
+    }
+
+    // internal
+    populateListeningClock(chartDom, title, currentValues, averageValues) {
+        // construct a list of 2-digit strings 00-23
+        let labels = [...Array(24).keys()].map(x => {
+            let s = String(x);
+            if (s.length == 1) {
+                s = `0${s}`
+            };
+            return s
+        });
+
+        var myChart = new Chart(chartDom, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Scrobbles',
+                    data: currentValues,
+                    backgroundColor: 'rgba(0,0,255,0.6)',
+                    borderColor: 'blue',
+                }, {
+                    label: '6 Month Avg',
+                    data: averageValues,
+                }]
+            },
+            options: {
+                responsive: true,
+                title: {
+                    display: true,
+                    text: title
+                },
+                tooltips: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                hover: {
+                    mode: 'nearest',
+                    intersect: true
+                },
+                scales: {
+                    xAxes: [{
+                        display: true,
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Hour'
+                        }
+                    }],
+                    yAxes: [{
+                        display: false,
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Value'
+                        }
+                    }]
+                }
+            }
+        });
+    }
+}
+
+class NewArtists {
+    constructor(page) {
+        this.page = page
+    }
+    refresh(state, data) {
+        console.log("refreshing NewArtists")
+        console.log(state)
+        console.log(data)
+
+        var artistListTable = document.querySelector("table.tinylist")
+        empty(artistListTable)
+        this.populateArtistList(artistListTable, data.artists);
+    }
+
+    populateArtistList(tableDom, artistData) {
+        const tmpl = document.querySelector("#artistrow_template")
+
+        for (const dat of artistData) {
+            var clone = document.importNode(tmpl.content, true);
+            var td = clone.querySelectorAll("td");
+            // XXX this style of child ref may be too fragile
+            td[0].children[0].src = randElt(dat.urls);
+            td[1].children[0].textContent = dat.artist;
+            td[1].children[2].textContent = dat.count;
+
+            tableDom.appendChild(clone);
+        }
+    }
+}
+
+// page-specific initializers
+function initArtistPage() {
     // init new page with initial state
     let page = new Page({
         offset: 0,     // how far back we are from the present
@@ -244,8 +388,53 @@ document.addEventListener('DOMContentLoaded', (e) => {
     // do the initial data refresh, which will cause the
     // widgets to be updated with newly fetched data
     page.refreshData()
-})
+}
 
+function initMonthlyPage() {
+    // init new page with initial state
+    let page = new Page({
+        offset: 0,     // how far back we are from the present
+        mode: "month", // current display mode
+    })
+
+    // define data sources
+    function topTracks(state) {
+        const monthlyTrackUrl = "/data/monthlyTracks"
+        return fetch(monthlyTrackUrl + makeQuery(state))
+            .then(response => response.json())
+    }
+
+    function topNewArtists(state) {
+        const monthlyArtistUrl = "/data/monthlyArtists"
+        return fetch(monthlyArtistUrl + makeQuery(state))
+            .then(response => response.json())
+    }
+
+    function listeningClock(state) {
+        const listeningClockUrl = "/data/listeningClock"
+        return fetch(listeningClockUrl + makeQuery(state))
+            .then(response => response.json())
+    }
+
+    // define widgets
+    let db = new DateBar(page)
+    db.init()
+    page.addWidget(db, [topTracks])
+
+    let tracks = new TrackList(page)
+    tracks.init()
+    page.addWidget(tracks, [topTracks])
+
+    let artists = new NewArtists(page)
+    page.addWidget(artists, [topNewArtists])
+
+    let clock = new ListeningClock(page)
+    page.addWidget(clock, [listeningClock])
+
+    // do the initial data refresh, which will cause the
+    // widgets to be updated with newly fetched data
+    page.refreshData()
+}
 
 /// xxx junk drawer
 function makeQuery(state) {
