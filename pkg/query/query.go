@@ -54,7 +54,7 @@ func TopTracks(db *sql.DB, start string, end string, limit int) ([]TrackResult, 
 	i := 0
 	for rows.Next() {
 		i++
-		groupConcat := "" // XXX NullString
+		var groupConcat sql.NullString
 		res := TrackResult{}
 
 		err = rows.Scan(&res.Artist, &res.Title, &res.PlayCount, &groupConcat)
@@ -63,7 +63,12 @@ func TopTracks(db *sql.DB, start string, end string, limit int) ([]TrackResult, 
 		}
 
 		res.Rank = i
-		res.ImageURLs = strings.Split(groupConcat, ",")
+		if groupConcat.Valid {
+			res.ImageURLs = strings.Split(groupConcat.String, ",")
+		} else {
+			res.ImageURLs = []string{}
+		}
+
 		tracks = append(tracks, res)
 	}
 
@@ -126,7 +131,7 @@ func TopNewArtists(db *sql.DB, start string, end string, limit int) ([]ArtistRes
 	  count(*) as plays,
 	  group_concat(distinct i.url) as images
 	  from activity a
-	  join image i on a.image_id = i.id
+	  left join image i on a.image_id = i.id
 	  where a.dt >= ? and a.dt < ?
 	  group by a.artist, a.artist_id
 	  order by plays desc
@@ -145,8 +150,8 @@ func TopNewArtists(db *sql.DB, start string, end string, limit int) ([]ArtistRes
 	defer rows.Close()
 
 	for rows.Next() {
-		tmp := ""         // ignore the initial date for now
-		groupConcat := "" // XXX NullString
+		tmp := "" // ignore the initial date for now
+		var groupConcat sql.NullString
 		res := ArtistResult{}
 
 		err = rows.Scan(&res.Name, &res.PlayCount, &tmp, &groupConcat)
@@ -154,7 +159,11 @@ func TopNewArtists(db *sql.DB, start string, end string, limit int) ([]ArtistRes
 			return artists, err
 		}
 
-		res.ImageURLs = strings.Split(groupConcat, ",")
+		if groupConcat.Valid {
+			res.ImageURLs = strings.Split(groupConcat.String, ",")
+		} else {
+			res.ImageURLs = []string{}
+		}
 		artists = append(artists, res)
 	}
 
