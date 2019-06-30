@@ -154,15 +154,16 @@ class DateBar {
     updateTitle(data) {
         let label = ""
 
-        let date = new Date(data.startDate)
+        let startDate = new Date(data.startDate)
+        let endDate = new Date(data.endDate)
         if (data.mode == "week") {
-            label = `${data.startDate} to ${data.endDate}`
+            label = `${startDate.toDateString()} to ${endDate.toDateString()}`
         } else if (data.mode == "month") {
             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-            label = `${monthNames[date.getMonth()]} ${date.getFullYear()}`
+            label = `${monthNames[startDate.getMonth()]} ${startDate.getFullYear()}`
         } else if (data.mode == "year") {
-            label = `${date.getFullYear()}`
+            label = `${startDate.getFullYear()}`
         }
 
         let elt = document.getElementById("datebar-title-label")
@@ -437,8 +438,11 @@ function initMonthlyPage() {
 }
 
 /// xxx junk drawer
+
 function makeQuery(state) {
-    return `?mode=${state.mode}&offset=${state.offset}`
+    let tzname = Intl.DateTimeFormat().resolvedOptions().timeZone
+    tzname = encodeURIComponent(tzname)
+    return `?mode=${state.mode}&offset=${state.offset}&tz=${tzname}`
 }
 
 function selectCoverImage(urls) {

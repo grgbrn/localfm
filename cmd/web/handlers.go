@@ -86,9 +86,18 @@ func artistsPage(w http.ResponseWriter, r *http.Request) {
 // many data handlers query over a date range
 type dateRangeParams struct {
 	mode  string
-	start string
-	end   string
+	start time.Time
+	end   time.Time
 	limit int
+	tz    *time.Location // to correctly interpret the times
+}
+
+func (dp dateRangeParams) StartString() string {
+	return dp.start.Format("2006-01-02 15:04:05")
+}
+
+func (dp dateRangeParams) EndString() string {
+	return dp.end.Format("2006-01-02 15:04:05")
 }
 
 // extractDateRangeParams translates mode=X&offset=Y parameters
@@ -115,9 +124,24 @@ func extractDateRangeParams(r *http.Request) (dateRangeParams, error) {
 		return params, errors.New("invalid format for parameter: offset")
 	}
 
+	// optional param: tz
+	tzStr := r.URL.Query().Get("tz")
+	if tzStr != "" {
+		loc, err := time.LoadLocation(tzStr)
+		if err != nil {
+			fmt.Printf("Error loading timezone:%s %v", tzStr, err)
+		} else {
+			params.tz = loc
+		}
+	}
+	if params.tz == nil {
+		params.tz = time.UTC
+	}
+
 	// optional param: count
-	params.limit = 20
+	// XXX client never actually changes the value
 	// countStr := r.URL.Query().Get("count")
+	params.limit = 20
 
 	// compute start/end dates from mode & offset
 	// XXX refactor this to be unit-testable and not depend on Now()
@@ -125,26 +149,24 @@ func extractDateRangeParams(r *http.Request) (dateRangeParams, error) {
 
 	if mode == "week" {
 		// show week ending today / last 7 days
-		end := now.AddDate(0, 0, -offset*7)
-		start := end.AddDate(0, 0, -7)
-		params.start = start.Format("2006-01-02")
-		params.end = end.Format("2006-01-02")
+		tmp := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, params.tz)
+		params.end = tmp.AddDate(0, 0, -offset*7)
+		params.start = params.end.AddDate(0, 0, -7)
 	} else if mode == "month" {
 		// show month to date (inconsistent with week)
-		start := now.AddDate(0, -offset, 0)
-		end := start.AddDate(0, 1, 0)
-		params.start = fmt.Sprintf("%d-%02d-01", start.Year(), start.Month())
-		params.end = fmt.Sprintf("%d-%02d-01", end.Year(), end.Month())
+		tmp := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, params.tz)
+		params.start = tmp.AddDate(0, -offset, 0)
+		params.end = params.start.AddDate(0, 1, 0)
 	} else if mode == "year" {
 		y := now.Year()
 		y -= offset
-		params.start = fmt.Sprintf("%d-01-01", y)
-		params.end = fmt.Sprintf("%d-01-01", y+1)
+		params.start = time.Date(y, time.January, 1, 0, 0, 0, 0, params.tz)
+		params.end = params.start.AddDate(1, 0, 0)
 	} else {
 		return params, errors.New("invalid value for parameter: mode")
 	}
 
-	fmt.Println(params) // XXX
+	fmt.Printf("{%s %s %d}\n", params.StartString(), params.EndString(), params.limit)
 	return params, nil
 }
 
@@ -153,8 +175,8 @@ func (app *application) topArtistsData(w http.ResponseWriter, r *http.Request) {
 
 	type topArtistsResponse struct {
 		Mode      string               `json:"mode"`
-		StartDate string               `json:"startDate"`
-		EndDate   string               `json:"endDate"`
+		StartDate time.Time            `json:"startDate"`
+		EndDate   time.Time            `json:"endDate"`
 		Artists   []query.ArtistResult `json:"artists"`
 	}
 
@@ -183,8 +205,8 @@ func (app *application) topNewArtistsData(w http.ResponseWriter, r *http.Request
 	// xxx duplicate of topArtistsResponse
 	type topNewArtistsResponse struct {
 		Mode      string               `json:"mode"`
-		StartDate string               `json:"startDate"`
-		EndDate   string               `json:"endDate"`
+		StartDate time.Time            `json:"startDate"`
+		EndDate   time.Time            `json:"endDate"`
 		Artists   []query.ArtistResult `json:"artists"`
 	}
 
@@ -212,8 +234,8 @@ func (app *application) topTracksData(w http.ResponseWriter, r *http.Request) {
 
 	type topTracksResponse struct {
 		Mode      string              `json:"mode"`
-		StartDate string              `json:"startDate"`
-		EndDate   string              `json:"endDate"`
+		StartDate time.Time           `json:"startDate"`
+		EndDate   time.Time           `json:"endDate"`
 		Tracks    []query.TrackResult `json:"tracks"`
 	}
 
@@ -239,7 +261,20 @@ func (app *application) topTracksData(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) listeningClockData(w http.ResponseWriter, r *http.Request) {
 
-	clock, err := query.ListeningClock(app.db, 4, 2019) // XXX need correct params
+	type listeningClockResponse struct {
+		Mode      string              `json:"mode"`
+		StartDate time.Time           `json:"startDate"`
+		EndDate   time.Time           `json:"endDate"`
+		Clock     []query.ClockResult `json:"clock"`
+	}
+
+	dp, err := extractDateRangeParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	clock, err := query.ListeningClock(app.db, dp.StartString(), dp.EndString())
 	if err != nil {
 		app.serverError(w, err)
 		return
