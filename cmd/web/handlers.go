@@ -274,7 +274,7 @@ func (app *application) listeningClockData(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	clock, err := query.ListeningClock(app.db, dp.StartString(), dp.EndString())
+	clock, err := query.ListeningClock(app.db, dp.mode, dp.start, dp.end, dp.tz)
 	if err != nil {
 		app.serverError(w, err)
 		return

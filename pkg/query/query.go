@@ -3,7 +3,6 @@ package query
 import (
 	"database/sql"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -169,6 +168,7 @@ func TopNewArtists(db *sql.DB, start, end time.Time, limit int) ([]ArtistResult,
 	return artists, nil
 }
 
+// XXX this is deprecated!
 // helper function to generate date boundaries for listening clock
 func listeningClockDates(month, year int) (s1, e1, s2 string) {
 
@@ -190,7 +190,56 @@ func listeningClockDates(month, year int) (s1, e1, s2 string) {
 	return start, end, avgStart
 }
 
-func ListeningClock(db *sql.DB, start, end string) (*[24]ClockResult, error) {
+// XXX i really need to be passing the entire query structure
+// XXX what does this mean for circular dependencies?
+// XXX is it ok for query to depend on handlers? (probably not)
+func listeningClockHelper(db *sql.DB, start, end time.Time, tz *time.Location) ([24]int, error) {
+
+	var counts [24]int
+
+	query := `select strftime('%Y-%m-%d %H:00', dt) as hour, count(*) as c
+	from activity
+	where dt >= ? and dt < ?
+	group by 1
+	order by 1;`
+
+	rows, err := db.Query(query, start, end)
+	if err != nil {
+		return counts, err
+	}
+	defer rows.Close()
+
+	rowCount := 0
+	for rows.Next() {
+		var hourStr string
+		count := 0
+
+		err = rows.Scan(&hourStr, &count)
+		if err != nil {
+			return counts, err
+		}
+
+		// need to manually parse the time string
+		hour, err := time.Parse("2006-01-02 15:04", hourStr)
+		if err != nil {
+			return counts, err
+		}
+		// and then convert from UTC to the user timezone
+		if tz != time.UTC {
+			hour = hour.In(tz)
+		}
+
+		//fmt.Printf("%v %d\n", hour, count)
+
+		counts[hour.Hour()] += count
+		rowCount++
+	}
+	fmt.Printf("listeningClockHelper processed %d rows\n", rowCount)
+	return counts, nil
+}
+
+// XXX this thing really just wants the whole dateParams struct doesn't it
+func ListeningClock(db *sql.DB, mode string, start, end time.Time, tz *time.Location) (*[24]ClockResult, error) {
 
 	// allocate the memory for the result and fill in the hours
 	var res [24]ClockResult
@@ -198,67 +247,38 @@ func ListeningClock(db *sql.DB, start, end string) (*[24]ClockResult, error) {
 		res[i].Hour = i
 	}
 
-	query := `select strftime('%H', dt) as hour, count(*) as c
-	from activity
-	where dt >= ? and dt < ?
-	group by 1
-	order by 1;`
-
-	// this requires the same query to be executed twice, once for the
-	// active period, once for the six month average before
-	// XXX need to calculate this period
-
-	// first query fills in the play counts
-	rows, err := db.Query(query, start, end)
+	// execute the first query, which is the regular listening counts
+	fmt.Printf("[[ %v - %v ]]\n", start, end)
+	regularCount, err := listeningClockHelper(db, start, end, tz)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		hour := ""
-		count := 0
-
-		err = rows.Scan(&hour, &count)
-		if err != nil {
-			return nil, err
-		}
-
-		// deal with the possibility of a sparse resultset - don't
-		// assume we got an entry for each hour
-		ix, err := strconv.Atoi(hour)
-		if err != nil {
-			return nil, err
-		}
-		res[ix].PlayCount = count
+	for i := 0; i < 24; i++ {
+		res[i].PlayCount = regularCount[i]
 	}
 
-	/*
-		// second query fills in the values for the six month average
-		rows, err = db.Query(query, avgStart, start)
-		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
+	// average the n preceding periods
+	// end on the start of the current "regular" period
+	const avgPeriod int = 6
+	var avgStart time.Time
+	if mode == "week" {
+		avgStart = start.AddDate(0, 0, -7*avgPeriod)
+	} else if mode == "month" {
+		avgStart = start.AddDate(0, -avgPeriod, 0)
+	} else if mode == "year" {
+		avgStart = start.AddDate(-avgPeriod, 0, 0)
+	}
 
-		for rows.Next() {
-			hour := ""
-			count := 0
+	fmt.Printf("[[ %v - %v ]]\n", avgStart, start)
+	avgCount, err := listeningClockHelper(db, avgStart, start, tz)
+	if err != nil {
+		return nil, err
+	}
+	for i := 0; i < 24; i++ {
+		res[i].AvgCount = avgCount[i] / avgPeriod // XXX how is this truncated?
+	}
 
-			err = rows.Scan(&hour, &count)
-			if err != nil {
-				return nil, err
-			}
-
-			// deal with the possibility of a sparse resultset - don't
-			// assume we got an entry for each hour
-			ix, err := strconv.Atoi(hour)
-			if err != nil {
-				return nil, err
-			}
-			res[ix].AvgCount = count / 6 // XXX how does this truncate?
-		}
-	*/
+	fmt.Printf("%+v\n", res)
 
 	return &res, nil
 }
