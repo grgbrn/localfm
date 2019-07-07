@@ -83,36 +83,19 @@ func artistsPage(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, "artists")
 }
 
-// many data handlers query over a date range
-type dateRangeParams struct {
-	mode  string
-	start time.Time
-	end   time.Time
-	limit int
-	tz    *time.Location // to correctly interpret the times
-}
-
-func (dp dateRangeParams) StartString() string {
-	return dp.start.Format("2006-01-02 15:04:05")
-}
-
-func (dp dateRangeParams) EndString() string {
-	return dp.end.Format("2006-01-02 15:04:05")
-}
-
 // extractDateRangeParams translates mode=X&offset=Y parameters
 // from the URL query into start/end/lim parameters expected by
 // the query package
-func extractDateRangeParams(r *http.Request) (dateRangeParams, error) {
+func extractDateRangeParams(r *http.Request) (query.DateRangeParams, error) {
 
-	var params dateRangeParams
+	var params query.DateRangeParams
 
 	// required param: mode
 	mode := r.URL.Query().Get("mode")
 	if mode == "" {
 		return params, errors.New("missing required parameter: mode")
 	}
-	params.mode = mode
+	params.Mode = mode
 
 	// required param: offset
 	offStr := r.URL.Query().Get("offset")
@@ -131,17 +114,17 @@ func extractDateRangeParams(r *http.Request) (dateRangeParams, error) {
 		if err != nil {
 			fmt.Printf("Error loading timezone:%s %v", tzStr, err)
 		} else {
-			params.tz = loc
+			params.TZ = loc
 		}
 	}
-	if params.tz == nil {
-		params.tz = time.UTC
+	if params.TZ == nil {
+		params.TZ = time.UTC
 	}
 
 	// optional param: count
 	// XXX client never actually changes the value
 	// countStr := r.URL.Query().Get("count")
-	params.limit = 20
+	params.Limit = 20
 
 	// compute start/end dates from mode & offset
 	// XXX refactor this to be unit-testable and not depend on Now()
@@ -149,24 +132,24 @@ func extractDateRangeParams(r *http.Request) (dateRangeParams, error) {
 
 	if mode == "week" {
 		// show week ending today / last 7 days
-		tmp := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, params.tz)
-		params.end = tmp.AddDate(0, 0, -offset*7)
-		params.start = params.end.AddDate(0, 0, -7)
+		tmp := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, params.TZ)
+		params.End = tmp.AddDate(0, 0, -offset*7)
+		params.Start = params.End.AddDate(0, 0, -7)
 	} else if mode == "month" {
 		// show month to date (inconsistent with week)
-		tmp := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, params.tz)
-		params.start = tmp.AddDate(0, -offset, 0)
-		params.end = params.start.AddDate(0, 1, 0)
+		tmp := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, params.TZ)
+		params.Start = tmp.AddDate(0, -offset, 0)
+		params.End = params.Start.AddDate(0, 1, 0)
 	} else if mode == "year" {
 		y := now.Year()
 		y -= offset
-		params.start = time.Date(y, time.January, 1, 0, 0, 0, 0, params.tz)
-		params.end = params.start.AddDate(1, 0, 0)
+		params.Start = time.Date(y, time.January, 1, 0, 0, 0, 0, params.TZ)
+		params.End = params.Start.AddDate(1, 0, 0)
 	} else {
 		return params, errors.New("invalid value for parameter: mode")
 	}
 
-	fmt.Printf("{%s %s %d}\n", params.StartString(), params.EndString(), params.limit)
+	fmt.Printf("{%s %s %d}\n", params.StartString(), params.EndString(), params.Limit)
 	return params, nil
 }
 
@@ -180,22 +163,22 @@ func (app *application) topArtistsData(w http.ResponseWriter, r *http.Request) {
 		Artists   []query.ArtistResult `json:"artists"`
 	}
 
-	dp, err := extractDateRangeParams(r)
+	params, err := extractDateRangeParams(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	artists, err := query.TopArtists(app.db, dp.start, dp.end, dp.limit)
+	artists, err := query.TopArtists(app.db, params)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
 	renderJSON(w, http.StatusOK, topArtistsResponse{
-		Mode:      dp.mode,
-		StartDate: dp.start,
-		EndDate:   dp.end,
+		Mode:      params.Mode,
+		StartDate: params.Start,
+		EndDate:   params.End,
 		Artists:   artists,
 	})
 }
@@ -210,22 +193,22 @@ func (app *application) topNewArtistsData(w http.ResponseWriter, r *http.Request
 		Artists   []query.ArtistResult `json:"artists"`
 	}
 
-	dp, err := extractDateRangeParams(r)
+	params, err := extractDateRangeParams(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	artists, err := query.TopNewArtists(app.db, dp.start, dp.end, dp.limit)
+	artists, err := query.TopNewArtists(app.db, params)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
 	renderJSON(w, http.StatusOK, topNewArtistsResponse{
-		Mode:      dp.mode,
-		StartDate: dp.start,
-		EndDate:   dp.end,
+		Mode:      params.Mode,
+		StartDate: params.Start,
+		EndDate:   params.End,
 		Artists:   artists,
 	})
 }
@@ -239,22 +222,22 @@ func (app *application) topTracksData(w http.ResponseWriter, r *http.Request) {
 		Tracks    []query.TrackResult `json:"tracks"`
 	}
 
-	dp, err := extractDateRangeParams(r)
+	params, err := extractDateRangeParams(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	topTracks, err := query.TopTracks(app.db, dp.start, dp.end, dp.limit)
+	topTracks, err := query.TopTracks(app.db, params)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
 	renderJSON(w, http.StatusOK, topTracksResponse{
-		Mode:      dp.mode,
-		StartDate: dp.start,
-		EndDate:   dp.end,
+		Mode:      params.Mode,
+		StartDate: params.Start,
+		EndDate:   params.End,
 		Tracks:    topTracks,
 	})
 }
@@ -268,13 +251,13 @@ func (app *application) listeningClockData(w http.ResponseWriter, r *http.Reques
 		Clock     []query.ClockResult `json:"clock"`
 	}
 
-	dp, err := extractDateRangeParams(r)
+	params, err := extractDateRangeParams(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	clock, err := query.ListeningClock(app.db, dp.mode, dp.start, dp.end, dp.tz)
+	clock, err := query.ListeningClock(app.db, params)
 	if err != nil {
 		app.serverError(w, err)
 		return

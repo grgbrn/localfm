@@ -7,6 +7,25 @@ import (
 	"time"
 )
 
+// DateRangeParams represents query params over a date range
+type DateRangeParams struct {
+	Mode  string
+	Start time.Time
+	End   time.Time
+	Limit int
+	TZ    *time.Location
+}
+
+// StartString returns a sqlite-compatible string with second granularity
+func (dp DateRangeParams) StartString() string {
+	return dp.Start.Format("2006-01-02 15:04:05")
+}
+
+// StartString returns a sqlite-compatible string with second granularity
+func (dp DateRangeParams) EndString() string {
+	return dp.End.Format("2006-01-02 15:04:05")
+}
+
 // ArtistResult contains popularity metrics about an artist
 type ArtistResult struct {
 	Rank      int      `json:"rank"`
@@ -34,7 +53,7 @@ type ClockResult struct {
 
 // TopTracks finds the most popular tracks by play count over
 // a bounded time period
-func TopTracks(db *sql.DB, start, end time.Time, limit int) ([]TrackResult, error) {
+func TopTracks(db *sql.DB, params DateRangeParams) ([]TrackResult, error) {
 	var tracks []TrackResult
 
 	query := `select a.artist, a.title, count(*) as plays, group_concat(distinct i.url)
@@ -44,7 +63,7 @@ func TopTracks(db *sql.DB, start, end time.Time, limit int) ([]TrackResult, erro
 	group by a.artist, a.title
 	order by plays desc limit ?;`
 
-	rows, err := db.Query(query, start, end, limit)
+	rows, err := db.Query(query, params.Start, params.End, params.Limit)
 	if err != nil {
 		return tracks, err
 	}
@@ -76,7 +95,7 @@ func TopTracks(db *sql.DB, start, end time.Time, limit int) ([]TrackResult, erro
 
 // TopArtists finds the most popular artists by play count over
 // a bounded time period
-func TopArtists(db *sql.DB, start, end time.Time, limit int) ([]ArtistResult, error) {
+func TopArtists(db *sql.DB, params DateRangeParams) ([]ArtistResult, error) {
 
 	var artists []ArtistResult
 
@@ -87,7 +106,7 @@ func TopArtists(db *sql.DB, start, end time.Time, limit int) ([]ArtistResult, er
 	group by a.artist
 	order by plays desc limit ?;`
 
-	rows, err := db.Query(query, start, end, limit)
+	rows, err := db.Query(query, params.Start, params.End, params.Limit)
 	if err != nil {
 		return artists, err
 	}
@@ -117,7 +136,7 @@ func TopArtists(db *sql.DB, start, end time.Time, limit int) ([]ArtistResult, er
 // TopNewArtists finds the most popular new artists by play count over
 // a bounded time period. "new" means the artist was first played during
 // this time period
-func TopNewArtists(db *sql.DB, start, end time.Time, limit int) ([]ArtistResult, error) {
+func TopNewArtists(db *sql.DB, params DateRangeParams) ([]ArtistResult, error) {
 
 	var artists []ArtistResult
 
@@ -139,9 +158,14 @@ func TopNewArtists(db *sql.DB, start, end time.Time, limit int) ([]ArtistResult,
 	a.artist_id = a2.artist_id
 	group by a.artist_id
 	having initial >= ? and initial < ?;`
-	params := []interface{}{start, end, limit, start, end}
+	queryParams := []interface{}{
+		params.Start,
+		params.End,
+		params.Limit,
+		params.Start,
+		params.End}
 
-	rows, err := db.Query(query, params...)
+	rows, err := db.Query(query, queryParams...)
 	if err != nil {
 		return artists, err
 	}
@@ -190,9 +214,6 @@ func listeningClockDates(month, year int) (s1, e1, s2 string) {
 	return start, end, avgStart
 }
 
-// XXX i really need to be passing the entire query structure
-// XXX what does this mean for circular dependencies?
-// XXX is it ok for query to depend on handlers? (probably not)
 func listeningClockHelper(db *sql.DB, start, end time.Time, tz *time.Location) ([24]int, error) {
 
 	var counts [24]int
@@ -238,8 +259,7 @@ func listeningClockHelper(db *sql.DB, start, end time.Time, tz *time.Location) (
 	return counts, nil
 }
 
-// XXX this thing really just wants the whole dateParams struct doesn't it
-func ListeningClock(db *sql.DB, mode string, start, end time.Time, tz *time.Location) (*[24]ClockResult, error) {
+func ListeningClock(db *sql.DB, params DateRangeParams) (*[24]ClockResult, error) {
 
 	// allocate the memory for the result and fill in the hours
 	var res [24]ClockResult
@@ -248,8 +268,8 @@ func ListeningClock(db *sql.DB, mode string, start, end time.Time, tz *time.Loca
 	}
 
 	// execute the first query, which is the regular listening counts
-	fmt.Printf("[[ %v - %v ]]\n", start, end)
-	regularCount, err := listeningClockHelper(db, start, end, tz)
+	fmt.Printf("[[ %v - %v ]]\n", params.Start, params.End)
+	regularCount, err := listeningClockHelper(db, params.Start, params.End, params.TZ)
 	if err != nil {
 		return nil, err
 	}
@@ -261,16 +281,16 @@ func ListeningClock(db *sql.DB, mode string, start, end time.Time, tz *time.Loca
 	// end on the start of the current "regular" period
 	const avgPeriod int = 6
 	var avgStart time.Time
-	if mode == "week" {
-		avgStart = start.AddDate(0, 0, -7*avgPeriod)
-	} else if mode == "month" {
-		avgStart = start.AddDate(0, -avgPeriod, 0)
-	} else if mode == "year" {
-		avgStart = start.AddDate(-avgPeriod, 0, 0)
+	if params.Mode == "week" {
+		avgStart = params.Start.AddDate(0, 0, -7*avgPeriod)
+	} else if params.Mode == "month" {
+		avgStart = params.Start.AddDate(0, -avgPeriod, 0)
+	} else if params.Mode == "year" {
+		avgStart = params.Start.AddDate(-avgPeriod, 0, 0)
 	}
 
-	fmt.Printf("[[ %v - %v ]]\n", avgStart, start)
-	avgCount, err := listeningClockHelper(db, avgStart, start, tz)
+	fmt.Printf("[[ %v - %v ]]\n", avgStart, params.Start)
+	avgCount, err := listeningClockHelper(db, avgStart, params.Start, params.TZ)
 	if err != nil {
 		return nil, err
 	}
