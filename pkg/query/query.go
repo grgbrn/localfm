@@ -192,28 +192,8 @@ func TopNewArtists(db *sql.DB, params DateRangeParams) ([]ArtistResult, error) {
 	return artists, nil
 }
 
-// XXX this is deprecated!
-// helper function to generate date boundaries for listening clock
-func listeningClockDates(month, year int) (s1, e1, s2 string) {
-
-	start := fmt.Sprintf("%d-%02d-01", year, month)
-	end := fmt.Sprintf("%d-%02d-01", year, month+1) // XXX
-
-	var avgMonth, avgYear int
-
-	if month < 6 {
-		avgMonth = (month - 6) + 12
-		avgYear = year - 1
-	} else {
-		avgMonth = month - 6
-		avgYear = year
-	}
-
-	avgStart := fmt.Sprintf("%d-%02d-01", avgYear, avgMonth)
-
-	return start, end, avgStart
-}
-
+// perform a query over a date range and sum play counts by hour ordinal
+// expressed in a specific timezone
 func listeningClockHelper(db *sql.DB, start, end time.Time, tz *time.Location) ([24]int, error) {
 
 	var counts [24]int
