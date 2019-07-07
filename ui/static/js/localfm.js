@@ -91,10 +91,17 @@ class Page {
                     }
                 }
             }).catch(e => {
-                // XXX error fetching remote data
-                // XXX need to invalidate the widgets
                 console.log("datasource error: " + fn.name)
                 console.log(e)
+                for (let w of widgets) {
+                    try {
+                        w.error("Error getting data")
+                    } catch (updateErr) {
+                        // internal error thrown by the widget
+                        console.log("error refreshing widget" + widgetName(w))
+                        console.log(updateErr)
+                    }
+                }
             })
         }
     }
@@ -165,6 +172,8 @@ class DateBar {
         this.updateTitle(data)
     }
 
+    error() { } // don't do anything
+
     updateTitle(data) {
         let label = ""
 
@@ -200,15 +209,6 @@ class ArtistGrid {
         } else {
             this.message("No data")
         }
-
-        // XXX this belongs in an error handler
-        // .catch(error => {
-        //     // XXX what's best practice for catching non-200s?
-        //     // YYUPDATE(maybe)
-        //     console.log("!!! error getting track data")
-        //     console.log(error)
-        //     empty(artistGallery)
-        // });
     }
 
     // internal methods
@@ -228,6 +228,10 @@ class ArtistGrid {
 
     message(message) {
         this.tableDom.innerHTML = "<div>&nbsp;"+message+"</div>"
+    }
+
+    error(message) {
+        this.tableDom.innerHTML = "<div>&nbsp;<span class='errortext'>"+message+"</span></div>"
     }
 }
 
@@ -269,6 +273,11 @@ class TrackList {
         // XXX how slow is innerhtml vs. templating?
         this.tableDom.innerHTML = "<tbody><tr><td>&nbsp;" + message + "</td></tr></tbody>";
     }
+
+    error(message) {
+        this.tableDom.innerHTML = "<tbody><tr><td class='errortext'>&nbsp;" + message + "</td></tr></tbody>";
+    }
+
 }
 
 class ListeningClock {
@@ -378,6 +387,10 @@ class NewArtists {
     message(message) {
         // XXX how slow is innerhtml vs. templating?
         this.tableDom.innerHTML = "<tbody><tr><td>&nbsp;" + message + "</td></tr></tbody>";
+    }
+
+    error(message) {
+        this.tableDom.innerHTML = "<tbody><tr><td class='errortext'>&nbsp;" + message + "</td></tr></tbody>";
     }
 }
 

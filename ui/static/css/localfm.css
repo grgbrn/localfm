@@ -3,6 +3,11 @@ body {
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
 }
 
+.errortext {
+    color: red;
+    font-weight: 700;
+}
+
 /* component: recent/top tracks */
 
 table.listview {
