@@ -188,14 +188,18 @@ class DateBar {
 class ArtistGrid {
     constructor(page) {
         this.page = page
+        this.tableDom = document.querySelector("div.gallery")
     }
     init() {
         // no event handlers, so nothing necessary
     }
     refresh(state, data) {
-        let artistGallery = document.querySelector("div.gallery")
-        empty(artistGallery)
-        this.populateArtistGallery(artistGallery, data.artists)
+        empty(this.tableDom)
+        if (data.artists && data.artists.length > 0) {
+            this.populateArtistGallery(data.artists)
+        } else {
+            this.message("No data")
+        }
 
         // XXX this belongs in an error handler
         // .catch(error => {
@@ -208,7 +212,7 @@ class ArtistGrid {
     }
 
     // internal methods
-    populateArtistGallery(tableDom, artistData) {
+    populateArtistGallery(artistData) {
         const tmpl = document.querySelector("#artist_tile_template")
 
         for (const dat of artistData) {
@@ -218,26 +222,34 @@ class ArtistGrid {
             div.children[1].children[0].textContent = dat.artist;
             div.children[1].children[2].textContent = dat.count;
 
-            tableDom.appendChild(clone);
+            this.tableDom.appendChild(clone);
         }
+    }
+
+    message(message) {
+        this.tableDom.innerHTML = "<div>&nbsp;"+message+"</div>"
     }
 }
 
 class TrackList {
     constructor(page) {
         this.page = page
+        this.tableDom = document.querySelector("table.listview")
     }
     init() {
         // no event handlers, so nothing necessary
     }
     refresh(state, data) {
-        var trackListTable = document.querySelector("table.listview")
-        empty(trackListTable)
-        this.populateTrackList(trackListTable, data.tracks)
+        empty(this.tableDom)
+        if (data.tracks && data.tracks.length > 0) {
+            this.populateTrackList(data.tracks)
+        } else {
+            this.message("No data")
+        }
     }
 
     // internal
-    populateTrackList(tableDom, trackData) {
+    populateTrackList(trackData) {
         const tmpl = document.querySelector("#trackrow_template")
 
         for (const dat of trackData) {
@@ -249,8 +261,13 @@ class TrackList {
             td[2].children[2].textContent = dat.artist;
             td[3].textContent = dat.count;
 
-            tableDom.appendChild(clone);
+            this.tableDom.appendChild(clone);
         }
+    }
+    // display a message in the table instead of data
+    message(message) {
+        // XXX how slow is innerhtml vs. templating?
+        this.tableDom.innerHTML = "<tbody><tr><td>&nbsp;" + message + "</td></tr></tbody>";
     }
 }
 
@@ -332,14 +349,18 @@ class ListeningClock {
 class NewArtists {
     constructor(page) {
         this.page = page
+        this.tableDom = document.querySelector("table.tinylist")
     }
     refresh(state, data) {
-        var artistListTable = document.querySelector("table.tinylist")
-        empty(artistListTable)
-        this.populateArtistList(artistListTable, data.artists);
+        empty(this.tableDom)
+        if (data.artists && data.artists.length > 0) {
+            this.populateArtistList(data.artists);
+        } else {
+            this.message("No data")
+        }
     }
 
-    populateArtistList(tableDom, artistData) {
+    populateArtistList(artistData) {
         const tmpl = document.querySelector("#artistrow_template")
 
         for (const dat of artistData) {
@@ -350,8 +371,13 @@ class NewArtists {
             td[1].children[0].textContent = dat.artist;
             td[1].children[2].textContent = dat.count;
 
-            tableDom.appendChild(clone);
+            this.tableDom.appendChild(clone);
         }
+    }
+
+    message(message) {
+        // XXX how slow is innerhtml vs. templating?
+        this.tableDom.innerHTML = "<tbody><tr><td>&nbsp;" + message + "</td></tr></tbody>";
     }
 }
 
