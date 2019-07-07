@@ -283,12 +283,12 @@ class TrackList {
 class ListeningClock {
     constructor(page) {
         this.page = page
-        this.chartDom = document.getElementById('myChart');
+        this.chartContainer = document.querySelector('.chartcontainer')
     }
     refresh(state, data) {
-        // XXX this doesn't seem to work very well
-        // XXX figure out how to dynamically update charts
-        //empty(this.chartDom)
+        // wipe out the existing canvas chart and recreate it from scratch
+        empty(this.chartContainer)
+        this.chartContainer.innerHTML = "<canvas id='myChart'></canvas>"
 
         if (data.clock && data.clock.length > 0) {
             let currentValues = data.clock.map(x => x.count)
@@ -316,7 +316,8 @@ class ListeningClock {
             return s
         });
 
-        var myChart = new Chart(this.chartDom, {
+        let chartDom = document.getElementById('myChart');
+        var myChart = new Chart(chartDom, {
             type: 'line',
             data: {
                 labels: labels,
