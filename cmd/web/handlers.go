@@ -245,10 +245,10 @@ func (app *application) topTracksData(w http.ResponseWriter, r *http.Request) {
 func (app *application) listeningClockData(w http.ResponseWriter, r *http.Request) {
 
 	type listeningClockResponse struct {
-		Mode      string              `json:"mode"`
-		StartDate time.Time           `json:"startDate"`
-		EndDate   time.Time           `json:"endDate"`
-		Clock     []query.ClockResult `json:"clock"`
+		Mode      string               `json:"mode"`
+		StartDate time.Time            `json:"startDate"`
+		EndDate   time.Time            `json:"endDate"`
+		Clock     *[]query.ClockResult `json:"clock"`
 	}
 
 	params, err := extractDateRangeParams(r)
@@ -263,5 +263,10 @@ func (app *application) listeningClockData(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	renderJSON(w, http.StatusOK, clock)
+	renderJSON(w, http.StatusOK, listeningClockResponse{
+		Mode:      params.Mode,
+		StartDate: params.Start,
+		EndDate:   params.End,
+		Clock:     clock,
+	})
 }

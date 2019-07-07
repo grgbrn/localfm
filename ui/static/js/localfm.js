@@ -283,20 +283,30 @@ class TrackList {
 class ListeningClock {
     constructor(page) {
         this.page = page
+        this.chartDom = document.getElementById('myChart');
     }
     refresh(state, data) {
-        var ctx = document.getElementById('myChart');
-        let currentValues = data.map(x => x.count)
-        let averageValues = data.map(x => x.avgCount)
+        // XXX this doesn't seem to work very well
+        // XXX figure out how to dynamically update charts
+        //empty(this.chartDom)
 
-        this.populateListeningClock(ctx,
-            'Apr 2019 Listening Clock', // XXX
-            currentValues,
-            averageValues);
+        if (data.clock && data.clock.length > 0) {
+            let currentValues = data.clock.map(x => x.count)
+            let averageValues = data.clock.map(x => x.avgCount)
+
+            let graphTitle = capitalize(data.mode) + "ly Listening Times"
+
+            this.populateListeningClock(
+                graphTitle,
+                `6 ${data.mode} avg`,
+                currentValues,
+                averageValues);
+
+        }
     }
 
     // internal
-    populateListeningClock(chartDom, title, currentValues, averageValues) {
+    populateListeningClock(title, avgLabel, currentValues, averageValues) {
         // construct a list of 2-digit strings 00-23
         let labels = [...Array(24).keys()].map(x => {
             let s = String(x);
@@ -306,7 +316,7 @@ class ListeningClock {
             return s
         });
 
-        var myChart = new Chart(chartDom, {
+        var myChart = new Chart(this.chartDom, {
             type: 'line',
             data: {
                 labels: labels,
@@ -316,7 +326,7 @@ class ListeningClock {
                     backgroundColor: 'rgba(0,0,255,0.6)',
                     borderColor: 'blue',
                 }, {
-                    label: '6 Month Avg',
+                    label: avgLabel,
                     data: averageValues,
                 }]
             },
