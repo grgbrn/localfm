@@ -1,31 +1,46 @@
 /*
 
-attempt at a combined JS file for local.fm, coming up with
-corresponding JS for each widget in the page
+Combined JS file for local.fm that defines widgets
+and datasources and allows them to be combined in a page
 
-main update flow, in the general style of Elm
+Page maintains a simple notion of state - for this app, it
+simply represents what the page is displaying, but not the
+data itself (e.g. "popular artists for June 2019" but not
+the actual ranked list of artists)
 
-state -> data -> refresh widgets -> state updates
+Datasources are simply functions that query the remote
+datasource to get the data described by a state
 
-our state is very simple, really just represents what the
-view is displaying without the data (should be stored in the
-url hash) but is used to fetch remote data which is displayed
-by the widgets
+Widgets are classes that handle the display of the data
+from the Datasources, and handling events that cause the
+state to be updated.
 
-this model only really seems sensible for apps with limited
-interactivity - remote data browsers like this one
+The main update flow is in the general style of Elm:
 
-updates to the state are caused by ui clicks
+State -> Datasources -> Widgets -> state updates
 
-this triggers remote data to be fetched by a datasource function
-which then refreshes all widgets that depend on that data
+The Page maintains simple dependencies of which datasources
+are used to refresh wich widgets. Currently each widget can
+depend on only a single datasource, but a single datasource
+can "feed" multiple widgets. This model only really works
+for apps with limited interactivity, things like remote data
+browsers
+
+UI events make changes to the state and then refresh all
+datasources. When the new data is received, all dependent
+widgets are refreshed
+
+Current limitations:
+
+- each ui event causes all datasources to be refreshed
+- each widget can only depend on a single datasource
 
 */
 
 // Page is a simple container for multiple widgets on a single page
 class Page {
     constructor(initialState) {
-        this.widgets = []
+        this.widgets = [] // XXX what do we use this for?
         this.state = initialState
 
         // holds a map of DataSources -> widgets
@@ -42,40 +57,43 @@ class Page {
             }
             this.deps.get(dep).push(w)
         }
-        console.log(this.deps)
-        console.log("adding widget:" + w)
         this.widgets.push(w)
+    }
+
+    debugDeps() {
+        console.log(`Page has ${this.widgets.length} widgets, ${this.deps.size} datasources:`)
+        for (let [fn, widgets] of this.deps) {
+            let widgetNames = widgets.map(widgetName)
+            console.log(`  ${fn.name}() -> ${widgetNames.join(' ')}`)
+        }
     }
 
     // call each registered datasource function and pass
     // the results to each widget that depends on it
     refreshData() {
-        console.log("refreshing data for state:")
-        console.log(this.state)
+        console.log("refreshing data with state: " + JSON.stringify(this.state))
 
         for (let [fn, widgets] of this.deps) {
-            console.log("updating source:")
-            console.log(fn)
-            console.log(widgets)
+            console.log("calling datasource: " + fn.name)
 
             let p = fn(this.state)
             p.then(data => {
-                console.log("got data")
+                console.log(`${fn.name} got data:`)
                 console.log(data)
                 for (let w of widgets) {
                     try {
+                        console.log("refreshing widget " + widgetName(w))
                         w.refresh(this.state, data)
                     } catch (err) {
                         // XXX this is an internal error thrown by a widget?
-                        console.log("error refreshing widget:")
-                        console.log(w)
+                        console.log("error refreshing widget" + widgetName(w))
                         console.log(err)
                     }
                 }
             }).catch(e => {
                 // XXX error fetching remote data
-                // XXX need to invalidate the widget
-                console.log("datasource error")
+                // XXX need to invalidate the widgets
+                console.log("datasource error: " + fn.name)
                 console.log(e)
             })
         }
@@ -130,12 +148,8 @@ class DateBar {
         })
     }
 
-    // xxx call this update instead?
+    // this is necessary only to update the labels in the datebar
     refresh(state, data) {
-        console.log("refreshing datebar")
-        console.log(state)
-        console.log(data)
-
         // set link labels
         let controlLabel = capitalize(state.mode)
         document.querySelector("#datebar-prev-label").textContent = controlLabel
@@ -179,10 +193,6 @@ class ArtistGrid {
         // no event handlers, so nothing necessary
     }
     refresh(state, data) {
-        console.log("refreshing ArtistGrid")
-        console.log(state)
-        console.log(data)
-
         let artistGallery = document.querySelector("div.gallery")
         empty(artistGallery)
         this.populateArtistGallery(artistGallery, data.artists)
@@ -221,10 +231,6 @@ class TrackList {
         // no event handlers, so nothing necessary
     }
     refresh(state, data) {
-        console.log("refreshing TrackList")
-        console.log(state)
-        console.log(data)
-
         var trackListTable = document.querySelector("table.listview")
         empty(trackListTable)
         this.populateTrackList(trackListTable, data.tracks)
@@ -253,12 +259,6 @@ class ListeningClock {
         this.page = page
     }
     refresh(state, data) {
-        console.log("refreshing ListeningClock")
-        console.log(state)
-        console.log(data)
-
-        console.log(`got ${data.length} hours from json call`)
-
         var ctx = document.getElementById('myChart');
         let currentValues = data.map(x => x.count)
         let averageValues = data.map(x => x.avgCount)
@@ -334,10 +334,6 @@ class NewArtists {
         this.page = page
     }
     refresh(state, data) {
-        console.log("refreshing NewArtists")
-        console.log(state)
-        console.log(data)
-
         var artistListTable = document.querySelector("table.tinylist")
         empty(artistListTable)
         this.populateArtistList(artistListTable, data.artists);
@@ -386,6 +382,8 @@ function initArtistPage() {
     ag.init()
     page.addWidget(ag, [topArtists])
 
+    page.debugDeps()
+
     // do the initial data refresh, which will cause the
     // widgets to be updated with newly fetched data
     page.refreshData()
@@ -432,6 +430,8 @@ function initMonthlyPage() {
     let clock = new ListeningClock(page)
     page.addWidget(clock, [listeningClock])
 
+    page.debugDeps()
+
     // do the initial data refresh, which will cause the
     // widgets to be updated with newly fetched data
     page.refreshData()
@@ -465,4 +465,8 @@ function randElt(arr) {
 
 function capitalize(s) {
     return s && s[0].toUpperCase() + s.slice(1);
+}
+
+function widgetName(w) {
+    return `[${w.constructor.name}]`
 }
