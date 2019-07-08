@@ -40,8 +40,10 @@ Current limitations:
 // Page is a simple container for multiple widgets on a single page
 class Page {
     constructor(initialState) {
-        this.widgets = [] // XXX what do we use this for?
-        this.state = initialState
+        this.defaultState = initialState
+
+        // simple list of widgets (XXX maybe unused?)
+        this.widgets = []
 
         // holds a map of DataSources -> widgets
         // XXX wouldn't typescript be nice here
@@ -71,19 +73,20 @@ class Page {
     // call each registered datasource function and pass
     // the results to each widget that depends on it
     refreshData() {
-        console.log("refreshing data with state: " + JSON.stringify(this.state))
+        let state = this.getState()
+        console.log("refreshing data with state: " + JSON.stringify(state))
 
         for (let [fn, widgets] of this.deps) {
             console.log("calling datasource: " + fn.name)
 
-            let p = fn(this.state)
+            let p = fn(state)
             p.then(data => {
                 console.log(`${fn.name} got data:`)
                 console.log(data)
                 for (let w of widgets) {
                     try {
                         console.log("refreshing widget " + widgetName(w))
-                        w.refresh(this.state, data)
+                        w.refresh(state, data)
                     } catch (err) {
                         // XXX this is an internal error thrown by a widget?
                         console.log("error refreshing widget" + widgetName(w))
@@ -106,13 +109,33 @@ class Page {
         }
     }
 
+    getState() {
+        // values in the url hash are of the format #mode:offset
+        // mode values are "week", "month", "year"
+        let hash = window.location.hash
+        if (hash == "" || hash == "#") {
+            return this.defaultState
+        }
+        // trim any leading hash
+        if (hash[0] == "#") {
+            hash = hash.substring(1)
+        }
+        let [mode, offset] = hash.split(":")
+        return {
+            mode,
+            offset: parseInt(offset)
+        }
+    }
+
     // update keys in the state. any key not passed will
     // be left unchanged
     updateState(newState) {
+        let s = this.getState()
         for (let [key, val] of Object.entries(newState)) {
             console.log(`updating ${key} = ${val}`)
-            this.state[key] = val
+            s[key] = val
         }
+        window.location.hash = `${s.mode}:${s.offset}`
 
         // call all datasources with new state
         this.refreshData()
@@ -126,14 +149,18 @@ class DateBar {
 
     init() {
         document.getElementById("prevlink").addEventListener('click', e => {
+            e.preventDefault()
+            let current = this.page.getState()
             this.page.updateState({
-                'offset': this.page.state.offset + 1
+                'offset': current.offset + 1
             })
         })
 
         document.getElementById("nextlink").addEventListener('click', e => {
+            e.preventDefault()
+            let current = this.page.getState()
             this.page.updateState({
-                'offset': this.page.state.offset - 1
+                'offset': current.offset - 1
             })
         })
 
