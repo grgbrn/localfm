@@ -41,6 +41,7 @@ Current limitations:
 class Page {
     constructor(initialState) {
         this.defaultState = initialState
+        this.debugLogging = false
 
         // simple list of widgets (XXX maybe unused?)
         this.widgets = []
@@ -63,10 +64,18 @@ class Page {
     }
 
     debugDeps() {
-        console.log(`Page has ${this.widgets.length} widgets, ${this.deps.size} datasources:`)
+        console.log("activating debug logging")
+        this.debugLogging = true
+        this.log(`Page has ${this.widgets.length} widgets, ${this.deps.size} datasources:`)
         for (let [fn, widgets] of this.deps) {
             let widgetNames = widgets.map(widgetName)
-            console.log(`  ${fn.name}() -> ${widgetNames.join(' ')}`)
+            this.log(`  ${fn.name}() -> ${widgetNames.join(' ')}`)
+        }
+    }
+
+    log(...args) {
+        if (this.debugLogging) {
+            console.log(...args)
         }
     }
 
@@ -74,18 +83,18 @@ class Page {
     // the results to each widget that depends on it
     refreshData() {
         let state = this.getState()
-        console.log("refreshing data with state: " + JSON.stringify(state))
+        this.log("refreshing data with state: " + JSON.stringify(state))
 
         for (let [fn, widgets] of this.deps) {
-            console.log("calling datasource: " + fn.name)
+            this.log("calling datasource: " + fn.name)
 
             let p = fn(state)
             p.then(data => {
-                console.log(`${fn.name} got data:`)
-                console.log(data)
+                this.log(`${fn.name} got data:`)
+                this.log(data)
                 for (let w of widgets) {
                     try {
-                        console.log("refreshing widget " + widgetName(w))
+                        this.log("refreshing widget " + widgetName(w))
                         w.refresh(state, data)
                     } catch (err) {
                         // XXX this is an internal error thrown by a widget?
@@ -132,7 +141,7 @@ class Page {
     updateState(newState) {
         let s = this.getState()
         for (let [key, val] of Object.entries(newState)) {
-            console.log(`updating ${key} = ${val}`)
+            this.log(`updating ${key} = ${val}`)
             s[key] = val
         }
         window.location.hash = `${s.mode}:${s.offset}`
@@ -166,7 +175,7 @@ class DateBar {
 
         document.getElementById("daterange").addEventListener('change', e => {
 
-            console.log("date mode was changed:" + e.target.value)
+            console.log("date mode changed:" + e.target.value)
             /*
             XXX how to change offset value when switching between modes???
 
@@ -459,7 +468,7 @@ function initArtistPage() {
     ag.init()
     page.addWidget(ag, [topArtists])
 
-    page.debugDeps()
+    //page.debugDeps()
 
     // do the initial data refresh, which will cause the
     // widgets to be updated with newly fetched data
@@ -507,7 +516,7 @@ function initMonthlyPage() {
     let clock = new ListeningClock(page)
     page.addWidget(clock, [listeningClock])
 
-    page.debugDeps()
+    //page.debugDeps()
 
     // do the initial data refresh, which will cause the
     // widgets to be updated with newly fetched data
