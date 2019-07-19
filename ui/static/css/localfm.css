@@ -147,6 +147,13 @@ table.tinylist {
     background-color: hotpink;
 }
 
+/* sidebar layout helper */
+.sidebar-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
 /* can be removed i think? */
 .push {
     margin-left: auto;
@@ -169,8 +176,8 @@ table.tinylist {
 
     grid-template-areas:
         "db    .."
-        "main  chart"
-        "main  newart";
+        "main  side"
+        "main  side";
 }
 
 #monthly-pagegrid .datebar {
@@ -181,12 +188,8 @@ table.tinylist {
     grid-area: main;
 }
 
-#monthly-pagegrid .newartists {
-    grid-area: newart;
-}
-
-#monthly-pagegrid .chartcontainer {
-    grid-area: chart;
+#monthly-pagegrid .sidebar-container {
+    grid-area: side;
 }
 
 /* layout: artist page */
