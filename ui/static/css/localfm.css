@@ -154,12 +154,6 @@ table.tinylist {
     justify-content: flex-start;
 }
 
-/* can be removed i think? */
-.push {
-    margin-left: auto;
-    margin-top: 1em;
-}
-
 /*  general concept:
    - use classes for any reusable component thing
    - use ids for unique/one-off page components / configurations
