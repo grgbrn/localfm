@@ -28,16 +28,23 @@ func (app *application) serverError(w http.ResponseWriter, err error) {
 // XXX maybe add a clientError also?
 // file:///home/greg/Downloads/lets-go/html/03.04-centralized-error-handling.html
 
+// "tmpl" => "${tmpl}.page.tmpl"
 func renderTemplate(w http.ResponseWriter, tmpl string) {
-	templatePath := "./ui/html/" + tmpl + ".html"
-	t, err := template.ParseFiles(templatePath)
+	// xxx factor this out & clean it up
+	// first elt in array is the main template, others are deps
+	prefix := "./ui/html/"
+	files := []string{
+		prefix + tmpl + ".page.tmpl",
+		prefix + "base.layout.tmpl",
+	}
+	ts, err := template.ParseFiles(files...)
 	if err != nil {
 		log.Println(err.Error())
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
 
-	err = t.Execute(w, nil)
+	err = ts.Execute(w, nil)
 	if err != nil {
 		log.Println(err.Error())
 		http.Error(w, "Internal Server Error", 500)
