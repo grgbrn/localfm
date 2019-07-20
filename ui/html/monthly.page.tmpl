@@ -27,13 +27,7 @@
   </template>
 
   <!-- begin visible page content -->
-
-  <div class="topnav">
-    <a href="/recent">Recent</a>
-    <a class="active" href="/monthly">Monthly</a>
-    <a href="/artists">Artists</a>
-    <a href="#about">About</a>
-  </div>
+  {{template "topnav" "monthly"}}
 
   <div id="monthly-pagegrid">
     <!-- combo title / date control -->
