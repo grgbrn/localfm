@@ -1,20 +1,11 @@
-<!doctype html>
-<html>
+{{template "base" .}}
 
-<head>
-  <title>localfm : Recent Activity</title>
-  <meta charset="utf-8" />
-  <link rel="stylesheet" type="text/css" href="static/css/normalize.css" />
-  <link rel="stylesheet" type="text/css" href="static/css/localfm.css" />
-</head>
+{{define "title"}}Recent Activity{{end}}
 
-<body>
-  <div class="topnav">
-    <a class="active" href="/recent">Recent</a>
-    <a href="/monthly">Monthly</a>
-    <a href="/artists">Artists</a>
-    <a href="#about">About</a>
-  </div>
+{{define "header"}}{{end}}
+
+{{define "body"}}
+  {{template "topnav" "recent"}}
 
   <h3>Recently Played Tracks</h3>
   <table class="listview">
@@ -78,7 +69,4 @@
       <td><em>EQ_BREAK</em><br>Apparat</td>
       <td>38 minutes ago</td>
     </tr>
-
-</body>
-
-</html>
+{{end}}
