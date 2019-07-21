@@ -37,6 +37,7 @@ func renderTemplate(w http.ResponseWriter, tmpl string) {
 		prefix + tmpl + ".page.tmpl",
 		prefix + "base.layout.tmpl",
 		prefix + "topnav.partial.tmpl",
+		prefix + "datebar.partial.tmpl",
 	}
 	ts, err := template.ParseFiles(files...)
 	if err != nil {
