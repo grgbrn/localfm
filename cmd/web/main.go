@@ -64,7 +64,7 @@ func main() {
 	mux.HandleFunc("/", index)
 
 	mux.HandleFunc("/recent", recentPage)
-	mux.HandleFunc("/monthly", monthlyPage)
+	mux.HandleFunc("/tracks", tracksPage)
 	mux.HandleFunc("/artists", artistsPage)
 
 	mux.HandleFunc("/data/topArtists", app.topArtistsData)

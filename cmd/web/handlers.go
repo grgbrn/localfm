@@ -24,8 +24,8 @@ func recentPage(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, "recent")
 }
 
-func monthlyPage(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, "monthly")
+func tracksPage(w http.ResponseWriter, r *http.Request) {
+	renderTemplate(w, "tracks")
 }
 
 func artistsPage(w http.ResponseWriter, r *http.Request) {
