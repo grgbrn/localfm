@@ -1,0 +1,75 @@
+{{template "base" .}}
+
+{{define "title"}}Tracks{{end}}
+
+{{define "header"}}
+  <!-- chart deps -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.js"></script>
+{{end}}
+
+{{define "body"}}
+  <!-- try putting template blocks first for now -->
+  <template id="trackrow_template">
+    <tr>
+      <td>TRACKNUM</td>
+      <td><img class="coverimg" src="" alt=""></td>
+      <td><em>TITLE</em><br><span>ARTIST</span></td>
+      <td>COUNT</td>
+    </tr>
+  </template>
+
+  <template id="artistrow_template">
+    <tr>
+      <td><img class="avatar" src="" alt=""></td>
+      <td><em>ARTIST</em><br><span>COUNT</span> tracks</td>
+    </tr>
+  </template>
+
+  <!-- begin visible page content -->
+  {{template "topnav" "tracks"}}
+
+  <div id="monthly-pagegrid">
+    <!-- combo title / date control -->
+    {{template "datebar" "Popular Tracks"}}
+
+    <!-- tracks tile -->
+    <div class="mtracks">
+      <table class="listview">
+        <tbody>
+          <tr>
+            <td>&nbsp;loading...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- sidebar container with multiple sub-tiles -->
+    <div class="sidebar-container">
+      <!-- chart tile (kind of ugly) -->
+      <div class="chartcontainer">
+        <canvas id="myChart"></canvas>
+      </div>
+
+      <!-- new artists tile -->
+      <div class="newartists">
+        <h3>New Artists</h3>
+        <table class="tinylist">
+          <tbody>
+            <tr>
+              <td>loading...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+  </div>
+
+  <script type="text/javascript">
+    document.addEventListener('DOMContentLoaded', (e) => {
+      initMonthlyPage()
+    })
+  </script>
+{{end}}
