@@ -113,3 +113,28 @@ select strftime('%H', dt) as h, artist, dt
 from activity
 where dt>='2019-05-28' and dt < '2019-05-29'
 order by dt;
+
+
+-- start with artists present in dataset for the longest span
+select
+  l.artist, l.plays, l.t2 - l.t1 as r, l.d1, l.d2
+from (
+select artist, min(uts) t1, max(uts) t2, min(dt) d1, max(dt) d2, count(*) plays
+from activity
+group by artist
+order by plays desc) l
+order by r desc limit 20;
+
+-- bucket by... week?
+-- should give me a sparse list for sparklines
+select strftime('%Y-%W', dt) as week, count(*)
+from activity
+where artist='Monster Rally'
+group by 1
+order by 1;
+
+-- good test data for sparklines
+where artist='Sleater-Kinney'
+where artist='Juana Molina'
+where artist='Monster Rally'
+
