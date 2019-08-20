@@ -162,9 +162,7 @@ class DateBar {
     constructor(page) {
         this.page = page
         this.hasDateRange = false
-    }
 
-    init() {
         document.getElementById("prevlink").addEventListener('click', e => {
             e.preventDefault()
             let current = this.page.getState()
@@ -252,9 +250,7 @@ class ArtistGrid {
         this.page = page
         this.tableDom = document.querySelector("div.gallery")
     }
-    init() {
-        // no event handlers, so nothing necessary
-    }
+
     refresh(state, data) {
         empty(this.tableDom)
         if (data.artists && data.artists.length > 0) {
@@ -294,9 +290,7 @@ class TrackList {
         this.page = page
         this.tableDom = document.querySelector("table.listview")
     }
-    init() {
-        // no event handlers, so nothing necessary
-    }
+
     refresh(state, data) {
         empty(this.tableDom)
         if (data.tracks && data.tracks.length > 0) {
@@ -340,9 +334,7 @@ class RecentTrackList {
         this.page = page
         this.tableDom = document.querySelector("table.listview")
     }
-    init() {
-        // no event handlers, so nothing necessary
-    }
+
     refresh(state, data) {
         empty(this.tableDom)
         // xxx response attribute (.activity) needs to be a param
@@ -393,7 +385,6 @@ class RecentTrackList {
     error(message) {
         this.tableDom.innerHTML = "<tbody><tr><td class='errortext'>&nbsp;" + message + "</td></tr></tbody>";
     }
-
 }
 
 
@@ -540,13 +531,10 @@ function initArtistPage() {
     }
 
     // define widgets that depend on those data sources
-    // XXX this is a bit too verbose
     let db = new DateBar(page)
-    db.init()
     page.addWidget(db, [topArtists])
 
     let ag = new ArtistGrid()
-    ag.init()
     page.addWidget(ag, [topArtists])
 
     //page.debugDeps()
@@ -584,11 +572,9 @@ function initMonthlyPage() {
 
     // define widgets
     let db = new DateBar(page)
-    db.init()
     page.addWidget(db, [topTracks])
 
     let tracks = new TrackList(page)
-    tracks.init()
     page.addWidget(tracks, [topTracks])
 
     let artists = new NewArtists(page)
@@ -621,11 +607,9 @@ function initRecentPage() {
     }
 
     let db = new DateBar(page)
-    db.init()
     page.addWidget(db, [recentTracks])
 
     let tracks = new RecentTrackList(page)
-    tracks.init()
     page.addWidget(tracks, [recentTracks])
 
     // do the initial data refresh, which will cause the
