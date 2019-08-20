@@ -118,23 +118,22 @@ class Page {
         }
     }
 
-    // XXX should be more generic
     getState() {
-        // values in the url hash are of the format #mode:offset
-        // mode values are "week", "month", "year"
         let hash = window.location.hash
         if (hash == "" || hash == "#") {
             return this.defaultState
         }
-        // trim any leading hash
+        // trim any leading hash char
         if (hash[0] == "#") {
             hash = hash.substring(1)
         }
-        let [mode, offset] = hash.split(":")
-        return {
-            mode,
-            offset: parseInt(offset)
+        // break down the kv pairs
+        let res = {}
+        let params = new URLSearchParams(hash)
+        for (let [k, v] of params.entries()) {
+            res[k] = v
         }
+        return res
     }
 
     // update keys in the state. any key not passed will
@@ -145,16 +144,24 @@ class Page {
             this.log(`updating ${key} = ${val}`)
             s[key] = val
         }
-        window.location.hash = `${s.mode}:${s.offset}`
+        // maybe easier way to generate the query string?
+        let params = new URLSearchParams()
+        for (let [k,v] of Object.entries(s)) {
+            params.set(k,v)
+        }
+        window.location.hash = params.toString()
 
         // call all datasources with new state
         this.refreshData()
     }
 }
 
+// can also be used with the "nextbar" template if you don't need
+// the date range selector and only want prev/next links
 class DateBar {
     constructor(page) {
         this.page = page
+        this.hasDateRange = false
     }
 
     init() {
@@ -162,7 +169,7 @@ class DateBar {
             e.preventDefault()
             let current = this.page.getState()
             this.page.updateState({
-                'offset': current.offset + 1
+                'offset': intOrThrow(current.offset) + 1
             })
         })
 
@@ -170,34 +177,44 @@ class DateBar {
             e.preventDefault()
             let current = this.page.getState()
             this.page.updateState({
-                'offset': current.offset - 1
+                'offset': intOrThrow(current.offset) - 1
             })
         })
 
-        document.getElementById("daterange").addEventListener('change', e => {
+        let dateRange = document.getElementById("daterange")
+        if (dateRange) {
+            this.hasDateRange = true
 
-            console.log("date mode changed:" + e.target.value)
-            /*
-            XXX how to change offset value when switching between modes???
+            dateRange.addEventListener('change', e => {
 
-            going from week->month ideally it would display the current month
-            going from month->week it would display first month of the week?
+                console.log("date mode changed:" + e.target.value)
+                /*
+                XXX how to change offset value when switching between modes???
 
-            for now, just reset to 0 which isn't great...
-            */
-            this.page.updateState({
-                'mode': e.target.value,
-                'offset': 0
+                going from week->month ideally it would display the current month
+                going from month->week it would display first month of the week?
+
+                for now, just reset to 0 which isn't great...
+                */
+                this.page.updateState({
+                    'mode': e.target.value,
+                    'offset': 0
+                })
             })
-        })
+        } // end hasDateRange
     }
 
-    // this is necessary only to update the labels in the datebar
+    // this is necessary to update the labels in the datebar and to
+    // disable the "next" link when offset == 0
     refresh(state, data) {
-        // set link labels
-        let controlLabel = capitalize(state.mode)
-        document.querySelector("#datebar-prev-label").textContent = controlLabel
-        document.querySelector("#datebar-next-label").textContent = controlLabel
+        // set link labels (only for datebar)
+        if (this.hasDateRange) {
+            let controlLabel = capitalize(state.mode)
+            document.querySelector("#datebar-prev-label").textContent = controlLabel
+            document.querySelector("#datebar-next-label").textContent = controlLabel
+
+            this.updateTitle(data)
+        }
 
         // disable "next" link if we're at present time
         if (state.offset == 0) {
@@ -206,7 +223,6 @@ class DateBar {
             document.getElementById("nextlink").style.visibility = "";
         }
 
-        this.updateTitle(data)
     }
 
     error() { } // don't do anything
@@ -366,12 +382,6 @@ class RecentTrackList {
 
         return day_diff == 0 && (
             diff < 60 && "just now" || diff < 120 && "1 minute ago" || diff < 3600 && Math.floor(diff / 60) + " minutes ago" || diff < 7200 && "1 hour ago" || diff < 86400 && Math.floor(diff / 3600) + " hours ago") || day_diff == 1 && "Yesterday" || day_diff < 7 && day_diff + " days ago" || day_diff < 31 && Math.ceil(day_diff / 7) + " weeks ago";
-    }
-
-    formatDate(dateString) {
-        let dt = new Date(dateString)
-        // XXX many choices here!
-        return dt.toDateString()
     }
 
     // display a message in the table instead of data
@@ -606,9 +616,13 @@ function initRecentPage() {
     // must be a function that retuns a promise / async fn
     function recentTracks(state) {
         const artistDataUrl = "data/recentTracks"
-        return fetch(artistDataUrl + makeQuery2(state))
+        return fetch(artistDataUrl + makeQuery(state))
             .then(response => response.json())
     }
+
+    let db = new DateBar(page)
+    db.init()
+    page.addWidget(db, [recentTracks])
 
     let tracks = new RecentTrackList(page)
     tracks.init()
@@ -622,14 +636,6 @@ function initRecentPage() {
 /// xxx junk drawer
 
 function makeQuery(state) {
-    let tzname = Intl.DateTimeFormat().resolvedOptions().timeZone
-    tzname = encodeURIComponent(tzname)
-    return `?mode=${state.mode}&offset=${state.offset}&tz=${tzname}`
-}
-
-// now with more introspection!
-// XXX merge with the above makeQuery
-function makeQuery2(state) {
     let buf = ""
     for (let [key, value] of Object.entries(state)) {
         if (buf.length > 0) {
@@ -637,7 +643,9 @@ function makeQuery2(state) {
         }
         buf += `${key}=${value}`
     }
-    return "?" + buf
+    let tzname = Intl.DateTimeFormat().resolvedOptions().timeZone
+    tzname = encodeURIComponent(tzname)
+    return `?${buf}&tz=${tzname}`
 }
 
 function selectCoverImage(urls) {
@@ -665,3 +673,12 @@ function capitalize(s) {
 function widgetName(w) {
     return `[${w.constructor.name}]`
 }
+
+// parse an int from a string or throw an exception
+function intOrThrow(value) {
+    if (/^[-+]?(\d+)$/.test(value)) {
+      return Number(value);
+    } else {
+      throw "can't parse int param"
+    }
+  }
