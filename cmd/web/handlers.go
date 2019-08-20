@@ -191,6 +191,51 @@ func (app *application) topTracksData(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (app *application) recentTracksData(w http.ResponseWriter, r *http.Request) {
+
+	// don't think i need anything as complicated as the full dateRangeParams here
+	// so just use a simple offset/count scheme
+	var err error
+
+	type recentTracksResponse struct {
+		Offset int                    `json:"offset"`
+		Count  int                    `json:"count"`
+		Tracks []query.ActivityResult `json:"activity"`
+	}
+
+	// get offset & count params, both optional
+	offset := 0 // default
+	offStr := r.URL.Query().Get("offset")
+	if offStr != "" {
+		offset, err = strconv.Atoi(offStr)
+		if err != nil {
+			app.serverError(w, errors.New("error parsing parameter: offset"))
+			return
+		}
+	}
+	count := 20 // default
+	countStr := r.URL.Query().Get("count")
+	if countStr != "" {
+		count, err = strconv.Atoi(countStr)
+		if err != nil {
+			app.serverError(w, errors.New("error parsing parameter: count"))
+			return
+		}
+	}
+
+	recentTracks, err := query.RecentTracks(app.db, offset, count)
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	renderJSON(w, http.StatusOK, recentTracksResponse{
+		Offset: offset,
+		Count:  count,
+		Tracks: recentTracks,
+	})
+}
+
 func (app *application) listeningClockData(w http.ResponseWriter, r *http.Request) {
 
 	type listeningClockResponse struct {

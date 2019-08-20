@@ -21,7 +21,7 @@ func (dp DateRangeParams) StartString() string {
 	return dp.Start.Format("2006-01-02 15:04:05")
 }
 
-// StartString returns a sqlite-compatible string with second granularity
+// EndString returns a sqlite-compatible string with second granularity
 func (dp DateRangeParams) EndString() string {
 	return dp.End.Format("2006-01-02 15:04:05")
 }
@@ -34,13 +34,22 @@ type ArtistResult struct {
 	ImageURLs []string `json:"urls"`
 }
 
-// TrackResult contains popularity metrics about a track
+// TrackResult track popularity for a given time period
 type TrackResult struct {
-	Rank      int      `json:"rank"`
+	Rank      int      `json:"rank"` // display order
 	Artist    string   `json:"artist"`
 	Title     string   `json:"title"`
 	PlayCount int      `json:"count"`
 	ImageURLs []string `json:"urls"`
+}
+
+// ActivityResult represents a single track being played
+type ActivityResult struct {
+	Title     string    `json:"title"`
+	Artist    string    `json:"artist"`
+	Album     string    `json:"album"`
+	Time      time.Time `json:"when"`
+	ImageURLs []string  `json:"urls"`
 }
 
 // ClockResult holds hourly listening metrics, representing what time
@@ -49,6 +58,46 @@ type ClockResult struct {
 	Hour      int `json:"hour"`
 	PlayCount int `json:"count"`
 	AvgCount  int `json:"avgCount"`
+}
+
+// RecentTracks finds the most recently played tracks, with a simple page
+// offset and count
+func RecentTracks(db *sql.DB, trackOffset, count int) ([]ActivityResult, error) {
+	var tracks []ActivityResult
+
+	query := `select a.artist, a.title, a.album, a.dt, i.url
+	from activity a
+	left join image i on a.image_id = i.id
+	order by a.dt desc limit ? offset ?;`
+
+	offset := trackOffset * count
+	rows, err := db.Query(query, count, offset)
+	if err != nil {
+		return tracks, err
+	}
+	defer rows.Close()
+
+	i := 0
+	for rows.Next() {
+		i++
+		var maybeImg sql.NullString
+		res := ActivityResult{}
+
+		err = rows.Scan(&res.Artist, &res.Title, &res.Album, &res.Time, &maybeImg)
+		if err != nil {
+			return tracks, err
+		}
+
+		if maybeImg.Valid {
+			res.ImageURLs = []string{maybeImg.String}
+		} else {
+			res.ImageURLs = []string{}
+		}
+
+		tracks = append(tracks, res)
+	}
+
+	return tracks, nil
 }
 
 // TopTracks finds the most popular tracks by play count over

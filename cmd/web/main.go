@@ -71,6 +71,7 @@ func main() {
 	mux.HandleFunc("/data/topNewArtists", app.topNewArtistsData)
 	mux.HandleFunc("/data/topTracks", app.topTracksData)
 	mux.HandleFunc("/data/listeningClock", app.listeningClockData)
+	mux.HandleFunc("/data/recentTracks", app.recentTracksData)
 
 	// set up static file server to ignore /ui/static/ prefix
 	fileServer := http.FileServer(http.Dir("./ui/static/"))

@@ -118,6 +118,7 @@ class Page {
         }
     }
 
+    // XXX should be more generic
     getState() {
         // values in the url hash are of the format #mode:offset
         // mode values are "week", "month", "year"
@@ -271,6 +272,7 @@ class ArtistGrid {
     }
 }
 
+// xxx more specifically, this is for popular tracks
 class TrackList {
     constructor(page) {
         this.page = page
@@ -315,6 +317,75 @@ class TrackList {
     }
 
 }
+
+// xxx how to factor this a bit better?
+class RecentTrackList {
+    constructor(page) {
+        this.page = page
+        this.tableDom = document.querySelector("table.listview")
+    }
+    init() {
+        // no event handlers, so nothing necessary
+    }
+    refresh(state, data) {
+        empty(this.tableDom)
+        // xxx response attribute (.activity) needs to be a param
+        if (data.activity && data.activity.length > 0) {
+            this.populateTrackList(data.activity)
+        } else {
+            this.message("No data")
+        }
+    }
+
+    // internal
+    populateTrackList(trackData) {
+        const tmpl = document.querySelector("#recent_template")
+
+        for (const dat of trackData) {
+            var clone = document.importNode(tmpl.content, true);
+            var td = clone.querySelectorAll("td");
+            td[0].children[0].src = randElt(dat.urls);
+            td[1].children[0].textContent = dat.title;
+            td[1].children[2].textContent = dat.artist;
+            td[2].textContent = this.prettyDate(dat.when);
+            td[2].setAttribute('title', dat.when);
+
+            this.tableDom.appendChild(clone);
+        }
+    }
+
+    // Takes an ISO time and returns a string representing how
+    // long ago the date represents.
+    // https://johnresig.com/blog/javascript-pretty-date/
+    prettyDate(time) {
+        var date = new Date((time || "").replace(/-/g, "/").replace(/[TZ]/g, " ")),
+            diff = (((new Date()).getTime() - date.getTime()) / 1000),
+            day_diff = Math.floor(diff / 86400);
+
+        if (isNaN(day_diff) || day_diff < 0 || day_diff >= 31) return;
+
+        return day_diff == 0 && (
+            diff < 60 && "just now" || diff < 120 && "1 minute ago" || diff < 3600 && Math.floor(diff / 60) + " minutes ago" || diff < 7200 && "1 hour ago" || diff < 86400 && Math.floor(diff / 3600) + " hours ago") || day_diff == 1 && "Yesterday" || day_diff < 7 && day_diff + " days ago" || day_diff < 31 && Math.ceil(day_diff / 7) + " weeks ago";
+    }
+
+    formatDate(dateString) {
+        let dt = new Date(dateString)
+        // XXX many choices here!
+        return dt.toDateString()
+    }
+
+    // display a message in the table instead of data
+    message(message) {
+        // XXX how slow is innerhtml vs. templating?
+        this.tableDom.innerHTML = "<tbody><tr><td>&nbsp;" + message + "</td></tr></tbody>";
+    }
+
+    error(message) {
+        this.tableDom.innerHTML = "<tbody><tr><td class='errortext'>&nbsp;" + message + "</td></tr></tbody>";
+    }
+
+}
+
 
 class ListeningClock {
     constructor(page) {
@@ -523,12 +594,50 @@ function initMonthlyPage() {
     page.refreshData()
 }
 
+function initRecentPage() {
+    // init new page with initial state
+    let page = new Page({
+        offset: 0,     // how far back we are from the present
+        count: 20,     // number of tracks to display
+    })
+
+    // define data sources that retrieve external data based
+    // on that state
+    // must be a function that retuns a promise / async fn
+    function recentTracks(state) {
+        const artistDataUrl = "data/recentTracks"
+        return fetch(artistDataUrl + makeQuery2(state))
+            .then(response => response.json())
+    }
+
+    let tracks = new RecentTrackList(page)
+    tracks.init()
+    page.addWidget(tracks, [recentTracks])
+
+    // do the initial data refresh, which will cause the
+    // widgets to be updated with newly fetched data
+    page.refreshData()
+}
+
 /// xxx junk drawer
 
 function makeQuery(state) {
     let tzname = Intl.DateTimeFormat().resolvedOptions().timeZone
     tzname = encodeURIComponent(tzname)
     return `?mode=${state.mode}&offset=${state.offset}&tz=${tzname}`
+}
+
+// now with more introspection!
+// XXX merge with the above makeQuery
+function makeQuery2(state) {
+    let buf = ""
+    for (let [key, value] of Object.entries(state)) {
+        if (buf.length > 0) {
+            buf += "&"
+        }
+        buf += `${key}=${value}`
+    }
+    return "?" + buf
 }
 
 function selectCoverImage(urls) {
