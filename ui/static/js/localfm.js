@@ -349,9 +349,23 @@ class RecentTrackList {
     populateTrackList(trackData) {
         const tmpl = document.querySelector("#recent_template")
 
+        // initial header needs to reflect the date of the first track
+        let lastLabel = this.dateLabel(trackData[0].when)
+        let headerRow = this.makeHeaderRow(lastLabel)
+        this.tableDom.appendChild(headerRow)
+
         for (const dat of trackData) {
+            // see if a new header row needs to be inserted before
+            // this row
+            let label = this.dateLabel(dat.when)
+            if (label != lastLabel) {
+                headerRow = this.makeHeaderRow(label)
+                this.tableDom.appendChild(headerRow)
+                lastLabel = label
+            }
+
             var clone = document.importNode(tmpl.content, true);
-            var td = clone.querySelectorAll("td");
+            var td = clone.querySelectorAll("td"); // ???
             td[0].children[0].src = randElt(dat.urls);
             td[1].children[0].textContent = dat.title;
             td[1].children[2].textContent = dat.artist;
@@ -362,6 +376,29 @@ class RecentTrackList {
             td[2].setAttribute('title', d.toLocaleString());
 
             this.tableDom.appendChild(clone);
+        }
+    }
+
+    // return an array of [secs, days] of how old this time string is
+    dateDiffs(date) {
+        let diff = (((new Date()).getTime() - date.getTime()) / 1000)
+        let day_diff = Math.floor(diff / 86400)
+
+        if (isNaN(day_diff) || day_diff < 0 || day_diff >= 31) {
+            throw `can't calculate date diffs for: ${date}`
+        }
+        return [diff, day_diff]
+    }
+
+    dateLabel(time) {
+        let date = new Date(time)
+        let [secs, days] = this.dateDiffs(date)
+        if (days == 0) {
+            return "Today"
+        } else if (days == 1) {
+            return "Yesterday"
+        } else {
+            return date.toDateString()
         }
     }
 
@@ -377,7 +414,22 @@ class RecentTrackList {
         if (isNaN(day_diff) || day_diff < 0 || day_diff >= 31) return;
 
         return day_diff == 0 && (
-            diff < 60 && "just now" || diff < 120 && "1 minute ago" || diff < 3600 && Math.floor(diff / 60) + " minutes ago" || diff < 7200 && "1 hour ago" || diff < 86400 && Math.floor(diff / 3600) + " hours ago") || day_diff == 1 && "Yesterday" || day_diff < 7 && day_diff + " days ago" || day_diff < 31 && Math.ceil(day_diff / 7) + " weeks ago";
+            diff < 60 && "just now" ||
+            diff < 120 && "1 minute ago" ||
+            diff < 3600 && Math.floor(diff / 60) + " minutes ago" ||
+            diff < 7200 && "1 hour ago" ||
+            diff < 86400 && Math.floor(diff / 3600) + " hours ago") ||
+            day_diff == 1 && date.toLocaleTimeString() ||
+            day_diff < 7 && day_diff + " days ago" ||
+            day_diff < 31 && Math.ceil(day_diff / 7) + " weeks ago"
+    }
+
+    makeHeaderRow(label) {
+        const headerTmpl = document.querySelector("#date_title")
+        var clone = document.importNode(headerTmpl.content, true);
+        var td = clone.querySelectorAll("td"); // skip past the tr
+        td[0].textContent = label;
+        return clone
     }
 
     // display a message in the table instead of data

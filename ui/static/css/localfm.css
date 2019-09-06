@@ -30,6 +30,13 @@ table.listview {
     height: 32px;
 }
 
+.listtitle {
+    background-color: rgb(9, 98, 133);
+    opacity: 0.8;
+    color:white;
+    text-align: center;
+}
+
 /* component: new_artists */
 
 table.tinylist {
