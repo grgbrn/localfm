@@ -16,16 +16,21 @@
     </tr>
   </template>
 
-  {{template "nextbar" "Recently Played Tracks"}}
-  <!-- tracks tile -->
-  <div class="mtracks">
-    <table class="listview">
-      <tbody>
-        <tr>
-          <td>&nbsp;loading...</td>
-        </tr>
-      </tbody>
-    </table>
+  <div id="monthly-pagegrid">
+    <!-- prev/next links  -->
+    {{template "nextbar" "Recently Played Tracks"}}
+
+    <!-- tracks tile -->
+    <div class="mtracks">
+      <table class="listview">
+        <tbody>
+          <tr>
+            <td>&nbsp;loading...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
   </div>
 
   <script type="text/javascript">

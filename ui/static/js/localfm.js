@@ -356,7 +356,10 @@ class RecentTrackList {
             td[1].children[0].textContent = dat.title;
             td[1].children[2].textContent = dat.artist;
             td[2].textContent = this.prettyDate(dat.when);
-            td[2].setAttribute('title', dat.when);
+
+            // display local timezone-specific text repr in a tooltip
+            let d = new Date(dat.when)
+            td[2].setAttribute('title', d.toLocaleString());
 
             this.tableDom.appendChild(clone);
         }
@@ -366,7 +369,8 @@ class RecentTrackList {
     // long ago the date represents.
     // https://johnresig.com/blog/javascript-pretty-date/
     prettyDate(time) {
-        var date = new Date((time || "").replace(/-/g, "/").replace(/[TZ]/g, " ")),
+        // var date = new Date((time || "").replace(/-/g, "/").replace(/[TZ]/g, " ")),
+        var date = new Date(time),
             diff = (((new Date()).getTime() - date.getTime()) / 1000),
             day_diff = Math.floor(diff / 86400);
 

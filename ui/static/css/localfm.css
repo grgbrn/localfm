@@ -204,3 +204,23 @@ table.tinylist {
 #artist-pagegrid .gallery {
     grid-area: gal;
 }
+
+/* laayout: recent page */
+#recent-pagegrid {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    grid-column-gap: 50px;
+
+    grid-template-areas:
+        "db    .."
+        "main  .."
+        "main  ..";
+}
+
+#recent-pagegrid .datebar {
+    grid-area: db;
+}
+
+#recent-pagegrid .mtracks {
+    grid-area: main;
+}
