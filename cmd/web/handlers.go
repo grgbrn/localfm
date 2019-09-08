@@ -10,6 +10,61 @@ import (
 	"bitbucket.org/grgbrn/localfm/pkg/query"
 )
 
+//
+// login pages
+//
+func (app *application) loginUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		renderTemplate(w, "login", &templateData{})
+	} else if r.Method == "POST" {
+		err := r.ParseForm()
+		if err != nil {
+			// XXX should be client error
+			// http.StatusBadRequest
+			http.Error(w, "Internal Server Error", http.StatusBadRequest)
+			return
+		}
+
+		// retrieve field values
+		email := r.PostForm.Get("email")
+		passwd := r.PostForm.Get("password")
+
+		userID, err := authenticateUser(email, passwd)
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusBadRequest)
+			return
+		}
+		if userID == -1 {
+			renderTemplate(w, "login", &templateData{
+				Error: "Email or Password is incorrect",
+			})
+			return
+		}
+		fmt.Println("login successful! setting user session")
+		app.session.Put(r, "authenticatedUserID", userID)
+
+		// redirect to splash page
+		// XXX but we should remember what the user was trying
+		// to get to when we intercepted them...
+		http.Redirect(w, r, "./recent", http.StatusSeeOther)
+	} else {
+		http.Error(w, "Internal Server Error", http.StatusBadRequest)
+		return
+	}
+}
+
+func (app *application) logoutUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Internal Server Error", http.StatusBadRequest)
+		return
+	}
+	app.session.Remove(r, "authenticatedUserID")
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+//
+// authenticated app pages
+//
 func index(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -19,17 +74,16 @@ func index(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "./recent", http.StatusTemporaryRedirect)
 }
 
-// primary html templates
 func recentPage(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, "recent")
+	renderTemplate(w, "recent", nil)
 }
 
 func tracksPage(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, "tracks")
+	renderTemplate(w, "tracks", nil)
 }
 
 func artistsPage(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, "artists")
+	renderTemplate(w, "artists", nil)
 }
 
 // extractDateRangeParams translates mode=X&offset=Y parameters
@@ -102,7 +156,9 @@ func extractDateRangeParams(r *http.Request) (query.DateRangeParams, error) {
 	return params, nil
 }
 
+//
 // json data handlers
+//
 func (app *application) topArtistsData(w http.ResponseWriter, r *http.Request) {
 
 	type topArtistsResponse struct {

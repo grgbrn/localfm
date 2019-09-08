@@ -86,23 +86,31 @@ func main() {
 	// create middleware chains
 	//
 	standardMiddleware := alice.New(app.logRequest, secureHeaders)
-	dynamicMiddleware := alice.New(app.session.Enable)
+	dynamicMiddleware := standardMiddleware.Append(app.session.Enable)
+	protectedMiddleware := dynamicMiddleware.Append(app.requireAuthentication)
+	dataMiddleware := dynamicMiddleware.Append(app.requireAPIAuth)
 
 	//
 	// create a new ServeMux and register handlers
 	//
 	mux := http.NewServeMux()
-	mux.Handle("/", dynamicMiddleware.ThenFunc(index))
 
-	mux.Handle("/recent", dynamicMiddleware.ThenFunc(recentPage))
-	mux.Handle("/tracks", dynamicMiddleware.ThenFunc(tracksPage))
-	mux.Handle("/artists", dynamicMiddleware.ThenFunc(artistsPage))
+	// login/logout
+	mux.Handle("/login", dynamicMiddleware.ThenFunc(app.loginUser))
+	mux.Handle("/logout", dynamicMiddleware.ThenFunc(app.logoutUser))
 
-	mux.Handle("/data/topArtists", dynamicMiddleware.ThenFunc(app.topArtistsData))
-	mux.Handle("/data/topNewArtists", dynamicMiddleware.ThenFunc(app.topNewArtistsData))
-	mux.Handle("/data/topTracks", dynamicMiddleware.ThenFunc(app.topTracksData))
-	mux.Handle("/data/listeningClock", dynamicMiddleware.ThenFunc(app.listeningClockData))
-	mux.Handle("/data/recentTracks", dynamicMiddleware.ThenFunc(app.recentTracksData))
+	// app pages
+	mux.Handle("/", protectedMiddleware.ThenFunc(index))
+	mux.Handle("/recent", protectedMiddleware.ThenFunc(recentPage))
+	mux.Handle("/tracks", protectedMiddleware.ThenFunc(tracksPage))
+	mux.Handle("/artists", protectedMiddleware.ThenFunc(artistsPage))
+
+	// data calls
+	mux.Handle("/data/topArtists", dataMiddleware.ThenFunc(app.topArtistsData))
+	mux.Handle("/data/topNewArtists", dataMiddleware.ThenFunc(app.topNewArtistsData))
+	mux.Handle("/data/topTracks", dataMiddleware.ThenFunc(app.topTracksData))
+	mux.Handle("/data/listeningClock", dataMiddleware.ThenFunc(app.listeningClockData))
+	mux.Handle("/data/recentTracks", dataMiddleware.ThenFunc(app.recentTracksData))
 
 	// set up static file server to ignore /ui/static/ prefix
 	fileServer := http.FileServer(http.Dir("./ui/static/"))

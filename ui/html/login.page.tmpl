@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>login</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="static/css/normalize.css" />
+    <style type="text/css">
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-size: 14px;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            line-height: 1.5;
+            background-color: #F1F3F6;
+            color: #34495E;
+            overflow-y: scroll;
+        }
+
+        .main {
+            padding: 2px calc((100% - 800px) / 2) 0;
+        }
+
+        .main {
+            margin-top: 54px;
+            margin-bottom: 54px;
+            min-height: calc(100vh - 345px);
+            overflow: auto;
+        }
+
+        a.button,
+        input[type="submit"] {
+            background-color: #62CB31;
+            border-radius: 3px;
+            color: #FFFFFF;
+            padding: 18px 27px;
+            border: none;
+            display: inline-block;
+            margin-top: 18px;
+            font-weight: 700;
+        }
+
+        a.button:hover,
+        input[type="submit"]:hover {
+            background-color: #4EB722;
+            color: #FFFFFF;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        form div {
+            margin-bottom: 18px;
+        }
+
+        form div:last-child {
+            border-top: 1px dashed #E4E5E7;
+        }
+
+        form input[type="radio"] {
+            position: relative;
+            top: 2px;
+            margin-left: 18px;
+        }
+
+        form input[type="text"],
+        form input[type="password"],
+        form input[type="email"] {
+            padding: 0.75em 18px;
+            width: 100%;
+        }
+
+        form input[type=text],
+        form input[type="password"],
+        form input[type="email"],
+        textarea {
+            color: #6A6C6F;
+            background: #FFFFFF;
+            border: 1px solid #E4E5E7;
+            border-radius: 3px;
+        }
+
+        form label {
+            display: inline-block;
+            margin-bottom: 9px;
+        }
+
+        .error {
+            color: #C0392B;
+            font-weight: bold;
+            display: block;
+        }
+
+        .error+textarea,
+        .error+input {
+            border-color: #C0392B !important;
+            border-width: 2px !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="main">
+        <form action='/login' method='POST' novalidate>
+            {{with .Error}}
+            <div class='error'>{{.}}</div>
+            {{end}}
+
+            <div>
+                <label>Email:</label>
+                <input type='email' name='email' value=''>
+            </div>
+            <div>
+                <label>Password:</label>
+                <input type='password' name='password'>
+            </div>
+            <div>
+                <input type='submit' value='Login'>
+            </div>
+        </form>
+    </div>
+</body>
+
+</html>
