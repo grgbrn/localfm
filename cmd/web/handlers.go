@@ -40,7 +40,6 @@ func (app *application) loginUser(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		fmt.Println("login successful! setting user session")
 		app.session.Put(r, "authenticatedUserID", userID)
 
 		// redirect to splash page

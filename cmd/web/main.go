@@ -70,7 +70,7 @@ func main() {
 		panic("SESSION_SECRET must contain 32 bytes")
 	}
 	session := sessions.New([]byte(sessionSecret))
-	session.Lifetime = 12 * time.Hour
+	session.Lifetime = 24 * 7 * time.Hour
 
 	//
 	// Initialize a new instance of application containing the dependencies.
