@@ -45,7 +45,11 @@ The bcrypt password can be generated from a *nix shell:
 htpasswd -bnBC 10 "" password | tr -d ':\n'
 ```
 
-XXX how to generate the session secret?
+A session secret can be generated with:
+```
+python -c 'import random, string; print("".join([random.choice(string.ascii_letters + string.digits) for x in range(32)]))'
+```
+*(works in either python 2 or 3)*
 
 last.fm streams occasionally contain repeated entries a few seconds apart
 which can affect your metrics.  localfm can be configured to flag these repeated entries and exclude them from it's statistics. To enable this
