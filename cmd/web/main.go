@@ -6,14 +6,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/golangcollege/sessions"
 	"github.com/justinas/alice"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
-	"bitbucket.org/grgbrn/localfm/pkg/util"
 )
 
 type application struct {
@@ -28,30 +26,15 @@ func main() {
 	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
 
 	//
-	// database init (could be factored out!)
+	// database init
 	//
 	DSN := os.Getenv("DSN")
 	if DSN == "" {
 		panic("Must set DSN environment var")
 	}
-	// mimic DSN format from earlier python version of this tool
-	// "sqlite:///foo.db"
-	if !strings.HasPrefix(DSN, "sqlite://") {
-		panic("DSN var must be of the format 'sqlite:///foo.db'")
-	}
-	dbPath := DSN[9:]
-
-	// sqlite database drivers will automatically create empty databases
-	// if the file doesn't exist, so stat the file first and abort
-	// if there's no database (must be manually created with schema)
-	if !util.FileExists(dbPath) {
-		panic("Can't open database [0]")
-	}
-
-	// this seemingly never returns an error
-	db, err := m.InitDB(dbPath)
+	db, err := m.Open(DSN)
 	if err != nil {
-		panic("Can't open database [1]")
+		panic(err)
 	}
 
 	// init session store
@@ -76,7 +59,7 @@ func main() {
 	// Initialize a new instance of application containing the dependencies.
 	//
 	app := &application{
-		db:      db,
+		db:      db.SQL,
 		info:    infoLog,
 		err:     errorLog,
 		session: session,

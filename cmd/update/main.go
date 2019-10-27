@@ -2,7 +2,9 @@ package main
 
 import (
 	"flag"
+	"os"
 
+	m "bitbucket.org/grgbrn/localfm/pkg/model"
 	"bitbucket.org/grgbrn/localfm/pkg/update"
 )
 
@@ -15,5 +17,17 @@ func main() {
 
 	flag.Parse()
 
-	update.FetchLatestScrobbles(*delayPtr, *limitPtr, *dupePtr)
+	//
+	// database init
+	//
+	DSN := os.Getenv("DSN")
+	if DSN == "" {
+		panic("Must set DSN environment var")
+	}
+	db, err := m.Open(DSN)
+	if err != nil {
+		panic(err)
+	}
+
+	update.FetchLatestScrobbles(db, *delayPtr, *limitPtr, *dupePtr)
 }

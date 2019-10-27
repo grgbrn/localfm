@@ -1,13 +1,11 @@
 package update
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
@@ -151,40 +149,12 @@ func resumeCheckpoint() (traversalState, error) {
 	return newState, nil
 }
 
-func FetchLatestScrobbles(apiThrottleDelay int, requestLimit int, checkAllDuplicates bool) {
+// XXX needs to return actual errors instead of panicking
+func FetchLatestScrobbles(db *m.Database, apiThrottleDelay int, requestLimit int, checkAllDuplicates bool) {
 	var err error
 
-	//
-	// initialize database
-	//
-	var db *sql.DB
-
-	DSN := os.Getenv("DSN")
-	if DSN == "" {
-		panic("Must set DSN environment var")
-	}
-	// mimic DSN format from earlier python version of this tool
-	// "sqlite:///foo.db"
-	if !strings.HasPrefix(DSN, "sqlite://") {
-		panic("DSN var must be of the format 'sqlite:///foo.db'")
-	}
-	dbPath := DSN[9:]
-
-	// sqlite database drivers will automatically create empty databases
-	// if the file doesn't exist, so stat the file first and abort
-	// if there's no database (must be manually created with schema)
-	if !util.FileExists(dbPath) {
-		panic("Can't open database [0]")
-	}
-
-	// this seemingly never returns an error
-	db, err = m.InitDB(dbPath)
-	if err != nil {
-		panic("Can't open database [1]")
-	}
-
 	// returns err on nonexistent/corrupt db, zero val on empty db
-	latestDBTime, err := m.FindLatestTimestamp(db)
+	latestDBTime, err := db.FindLatestTimestamp()
 	if err != nil {
 		panic("Can't open database [2]")
 	}
@@ -226,7 +196,7 @@ func FetchLatestScrobbles(apiThrottleDelay int, requestLimit int, checkAllDuplic
 		if err != nil {
 			panic("error resuming checkpoint")
 		}
-		if state.Database != dbPath {
+		if state.Database != db.Path {
 			panic("recovering from checkpoint from different database")
 		}
 	} else if latestDBTime > 0 {
@@ -235,14 +205,14 @@ func FetchLatestScrobbles(apiThrottleDelay int, requestLimit int, checkAllDuplic
 		// use 1 greater than the max time or the latest track will be duplicated
 		state = traversalState{
 			User:     Username,
-			Database: dbPath,
+			Database: db.Path,
 			From:     latestDBTime + 1,
 		}
 	} else {
 		fmt.Println("doing initial download for new database")
 		state = traversalState{
 			User:     Username,
-			Database: dbPath,
+			Database: db.Path,
 		}
 	}
 	fmt.Printf("start state: %+v\n", state)
@@ -281,7 +251,7 @@ func FetchLatestScrobbles(apiThrottleDelay int, requestLimit int, checkAllDuplic
 
 		// XXX review error handling here
 		fmt.Printf("* got %d tracks\n", len(tracks))
-		err = m.StoreActivity(db, tracks)
+		err = db.StoreActivity(tracks)
 		if err != nil {
 			fmt.Println("error saving tracks!")
 			fmt.Println(err)
@@ -326,7 +296,7 @@ func FetchLatestScrobbles(apiThrottleDelay int, requestLimit int, checkAllDuplic
 				since = latestDBTime
 			}
 
-			_, err = m.FlagDuplicates(db, since, int64(duplicateThresholdInt))
+			_, err = db.FlagDuplicates(since, int64(duplicateThresholdInt))
 			if err != nil {
 				fmt.Printf("Warning! problem flagging duplicates: %v\n", err)
 			}
