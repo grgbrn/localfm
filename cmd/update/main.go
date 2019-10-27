@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
@@ -29,5 +30,31 @@ func main() {
 		panic(err)
 	}
 
-	update.FetchLatestScrobbles(db, *delayPtr, *limitPtr, *dupePtr)
+	//
+	// load lastfm credentials
+	//
+	APIKey := os.Getenv("LASTFM_API_KEY")
+	APISecret := os.Getenv("LASTFM_API_SECRET")
+	Username := os.Getenv("LASTFM_USERNAME")
+
+	if APIKey == "" || APISecret == "" || Username == "" {
+		panic("Must set LASTFM_USERNAME, LASTFM_API_KEY and LASTFM_API_SECRET environment vars")
+	}
+
+	res, err := update.FetchLatestScrobbles(db,
+		update.LastFMCredentials{
+			APIKey:    APIKey,
+			APISecret: APISecret,
+			Username:  Username,
+		},
+		update.FetchOptions{
+			APIThrottleDelay: *delayPtr,
+			RequestLimit:     *limitPtr,
+			CheckDuplicates:  *dupePtr,
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%+v\n", res)
 }

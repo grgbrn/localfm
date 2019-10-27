@@ -2,6 +2,7 @@ package update
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -149,29 +150,55 @@ func resumeCheckpoint() (traversalState, error) {
 	return newState, nil
 }
 
-// XXX needs to return actual errors instead of panicking
-func FetchLatestScrobbles(db *m.Database, apiThrottleDelay int, requestLimit int, checkAllDuplicates bool) {
+// LastFMCredentials holds all of a user's API login credentials
+type LastFMCredentials struct {
+	APIKey    string
+	APISecret string
+	Username  string
+}
+
+// FetchOptions is all possible flags to pass to FetchLatestScrobbles
+type FetchOptions struct {
+	APIThrottleDelay int
+	RequestLimit     int
+	CheckDuplicates  bool
+}
+
+// FetchResults contains a summary of a fetch operation
+// XXX is there a way to return database ids here?
+type FetchResults struct {
+	NewItems     int
+	RequestCount int
+	Complete 	bool
+	Errors       []error
+}
+
+// add a new non-fatal error to the result
+func (fr *FetchResults) error(e error) {
+	fr.Errors = append(fr.Errors, e)
+}
+
+func (fr *FetchResults) errorMsg(message string) {
+	fr.Errors = append(fr.Errors, errors.New(message))
+}
+
+// FetchLatestScrobbles downloads scrobbles for a given user account
+// an error being returned means no updates were done, but FetchResults being returned
+// doesn't mean that no errors occurred (i.e. the update may be incomplete)
+func FetchLatestScrobbles(db *m.Database, creds LastFMCredentials, opts FetchOptions) (FetchResults, error) {
 	var err error
+	fetchResults := FetchResults{
+		Complete: false,
+	}
 
 	// returns err on nonexistent/corrupt db, zero val on empty db
 	latestDBTime, err := db.FindLatestTimestamp()
 	if err != nil {
-		panic("Can't open database [2]")
+		return fetchResults, err
 	}
 
-	//
-	// initialize lastfm api client
-	//
-	APIKey := os.Getenv("LASTFM_API_KEY")
-	APISecret := os.Getenv("LASTFM_API_SECRET")
-	Username := os.Getenv("LASTFM_USERNAME")
-
-	if APIKey == "" || APISecret == "" || Username == "" {
-		panic("Must set LASTFM_USERNAME, LASTFM_API_KEY and LASTFM_API_SECRET environment vars")
-	}
-
-	api = lastfm.New(APIKey, APISecret)
-	throttle = time.Tick(time.Duration(apiThrottleDelay) * time.Second)
+	api = lastfm.New(creds.APIKey, creds.APISecret)
+	throttle = time.Tick(time.Duration(opts.APIThrottleDelay) * time.Second)
 
 	/*
 		three choices for start state:
@@ -194,50 +221,49 @@ func FetchLatestScrobbles(db *m.Database, apiThrottleDelay int, requestLimit int
 		fmt.Println("resuming from checkpoint file")
 		state, err = resumeCheckpoint()
 		if err != nil {
-			panic("error resuming checkpoint")
+			return fetchResults, errors.New("error resuming checkpoint")
 		}
 		if state.Database != db.Path {
-			panic("recovering from checkpoint from different database")
+			return fetchResults, errors.New("recovering from checkpoint from different database")
 		}
 	} else if latestDBTime > 0 {
 		fmt.Println("doing incremental update")
 		fmt.Printf("latest db time:%d [%v]\n", latestDBTime, time.Unix(latestDBTime, 0).UTC()) // XXX
 		// use 1 greater than the max time or the latest track will be duplicated
 		state = traversalState{
-			User:     Username,
+			User:     creds.Username,
 			Database: db.Path,
 			From:     latestDBTime + 1,
 		}
 	} else {
 		fmt.Println("doing initial download for new database")
 		state = traversalState{
-			User:     Username,
+			User:     creds.Username,
 			Database: db.Path,
 		}
 	}
 	fmt.Printf("start state: %+v\n", state)
 
-	// will not exceed requestLimit param if set (!=0)
-	requestCount := 0
-
 	errCount := 0 // number of successive errors
 	maxRetries := 3
 
-	newItems := 0
-
 	done := false
+	requestLimit := opts.RequestLimit
 
 	for !done {
 		newState, tracks, err := getNextTracks(state)
-		requestCount++
+		fetchResults.RequestCount++
 
 		if err != nil {
 			errCount++
+			// XXX use golang 1.13 error wrapping?
+			fetchResults.error(err)
 			fmt.Println("Error on api call:")
 			fmt.Println(err)
 
 			if errCount > maxRetries {
 				fmt.Println("Giving up after max retries")
+				fetchResults.errorMsg("Giving up after max retries")
 				break
 			} else {
 				backoff := util.Pow(2, errCount+1)
@@ -250,14 +276,16 @@ func FetchLatestScrobbles(db *m.Database, apiThrottleDelay int, requestLimit int
 		}
 
 		// XXX review error handling here
+		// XXX can StoreActivity return database ids?
 		fmt.Printf("* got %d tracks\n", len(tracks))
 		err = db.StoreActivity(tracks)
 		if err != nil {
-			fmt.Println("error saving tracks!")
+			fetchResults.error(err)
+			fmt.Println("error saving tracks")
 			fmt.Println(err)
 			break
 		}
-		newItems += len(tracks)
+		fetchResults.NewItems += len(tracks)
 
 		// write checkpoint and update state only if there
 		// were no errors processing the items
@@ -272,16 +300,18 @@ func FetchLatestScrobbles(db *m.Database, apiThrottleDelay int, requestLimit int
 
 		// only break from request limit after the checkpoint has
 		// been written so it's safe to resume
-		if requestLimit > 0 && requestCount >= requestLimit {
-			fmt.Println("request limit exceeded, exiting!")
+		if requestLimit > 0 && fetchResults.RequestCount >= requestLimit {
+			fetchResults.errorMsg("request limit exceeded, exiting")
+			fmt.Println("request limit exceeded, exiting")
 			break
 		}
 	}
+	fetchResults.Complete = done
 
 	// incremental duplicate suppression if env var is set
 	// commandline flag will cause it to re-check the entire database
 	duplicateThreshold := os.Getenv("LOCALFM_DUPLICATE_THRESHOLD")
-	if checkAllDuplicates && duplicateThreshold == "" {
+	if opts.CheckDuplicates && duplicateThreshold == "" {
 		fmt.Println("Warning! Must set LOCALFM_DUPLICATE_THRESHOLD with -duplicates flag")
 	}
 	if duplicateThreshold != "" {
@@ -290,7 +320,7 @@ func FetchLatestScrobbles(db *m.Database, apiThrottleDelay int, requestLimit int
 			fmt.Printf("Warning! LOCALFM_DUPLICATE_THRESHOLD couldn't be parsed: %v\n", err)
 		} else {
 			var since int64
-			if checkAllDuplicates {
+			if opts.CheckDuplicates {
 				since = 0
 			} else {
 				since = latestDBTime
@@ -304,16 +334,14 @@ func FetchLatestScrobbles(db *m.Database, apiThrottleDelay int, requestLimit int
 	}
 
 	// completed! so we can remove the checkpoint file (if it exists)
-	// XXX also print some stats here
-	if done {
-		if checkpointExists() {
-			err = os.Remove(checkpointFilename)
-			if err != nil {
-				fmt.Println("error removing checkpoint file. manually clean this up before next run")
-				// XXX return an error code here
-			}
+	if checkpointExists() {
+		err = os.Remove(checkpointFilename)
+		if err != nil {
+			// XXX golang 1.13 error wrapping?
+			// XXX also, does this count as incomplete?
+			fetchResults.error(err)
+			fmt.Println("error removing checkpoint file. manually clean this up before next run")
 		}
-	} else {
-		fmt.Println("incomplete run for some reason! probably need to continue from checkpoint")
 	}
+	return fetchResults, nil
 }
