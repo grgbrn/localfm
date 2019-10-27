@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"strconv"
 	"time"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
@@ -169,7 +168,7 @@ type FetchOptions struct {
 type FetchResults struct {
 	NewItems     int
 	RequestCount int
-	Complete 	bool
+	Complete     bool
 	Errors       []error
 }
 
@@ -307,31 +306,6 @@ func FetchLatestScrobbles(db *m.Database, creds LastFMCredentials, opts FetchOpt
 		}
 	}
 	fetchResults.Complete = done
-
-	// incremental duplicate suppression if env var is set
-	// commandline flag will cause it to re-check the entire database
-	duplicateThreshold := os.Getenv("LOCALFM_DUPLICATE_THRESHOLD")
-	if opts.CheckDuplicates && duplicateThreshold == "" {
-		fmt.Println("Warning! Must set LOCALFM_DUPLICATE_THRESHOLD with -duplicates flag")
-	}
-	if duplicateThreshold != "" {
-		duplicateThresholdInt, err := strconv.Atoi(duplicateThreshold)
-		if err != nil {
-			fmt.Printf("Warning! LOCALFM_DUPLICATE_THRESHOLD couldn't be parsed: %v\n", err)
-		} else {
-			var since int64
-			if opts.CheckDuplicates {
-				since = 0
-			} else {
-				since = latestDBTime
-			}
-
-			_, err = db.FlagDuplicates(since, int64(duplicateThresholdInt))
-			if err != nil {
-				fmt.Printf("Warning! problem flagging duplicates: %v\n", err)
-			}
-		}
-	}
 
 	// completed! so we can remove the checkpoint file (if it exists)
 	if checkpointExists() {
