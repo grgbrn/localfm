@@ -1,10 +1,9 @@
 package update
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"log"
 	"os"
 	"time"
 
@@ -14,139 +13,24 @@ import (
 	"github.com/shkh/lastfm-go/lastfm"
 )
 
-const checkpointFilename string = "checkpoint.json"
-
-// module globals
-var api *lastfm.Api
-var throttle <-chan time.Time
-
-type traversalState struct {
-	User     string
-	Database string
-
-	Page        int
-	TotalPages  int
-	TotalTracks int
-
-	From int64
-	To   int64 // nee Anchor
+// Fetcher contains all of the context necessary to download new scrobbles
+type Fetcher struct {
+	db       *m.Database
+	log      log.Logger
+	creds    LastFMCredentials
+	lastfm   *lastfm.Api
+	throttle <-chan time.Time
 }
 
-func (ts traversalState) isInitial() bool {
-	return ts.To == 0
-}
+// CreateFetcher makes a new Fetcher
+func CreateFetcher(db *m.Database, creds LastFMCredentials) *Fetcher {
+	api := lastfm.New(creds.APIKey, creds.APISecret)
 
-func (ts traversalState) isComplete() bool {
-	return !ts.isInitial() && (ts.TotalPages == 0 || ts.Page > ts.TotalPages)
-}
-
-// processResponse finds the max uts in a response, filters out the "now playing"
-// track (if any) and coerces remote API responses into local TrackInfo interface
-func processResponse(recentTracks lastfm.UserGetRecentTracks) (int64, []m.TrackInfo) {
-	var maxUTS int64
-	tracks := make([]m.TrackInfo, 0)
-
-	for _, track := range recentTracks.Tracks {
-		if track.NowPlaying != "true" {
-			tmp, _ := m.GetParsedUTS(track)
-			if tmp > maxUTS {
-				maxUTS = tmp
-			}
-			tracks = append(tracks, track)
-		}
+	return &Fetcher{
+		db:     db,
+		creds:  creds,
+		lastfm: api,
 	}
-
-	return maxUTS, tracks
-}
-
-// get the next page of responses, given a previous state
-func getNextTracks(current traversalState) (traversalState, []m.TrackInfo, error) {
-
-	if current.isComplete() {
-		panic("getNextTracks called on a completed state")
-	}
-
-	tracks := []m.TrackInfo{}
-	nextState := traversalState{
-		User:     current.User,
-		Database: current.Database,
-	}
-
-	// this lastfm.P thing doesn't seem very typesafe?
-	params := lastfm.P{
-		"user": current.User,
-	}
-	// need to pass to, from, page params from current state
-	if current.To != 0 {
-		params["to"] = current.To
-	}
-	if current.From != 0 {
-		params["from"] = current.From
-	}
-	if current.Page != 0 {
-		params["page"] = current.Page
-	}
-
-	// blocking read from rate-limit channel
-	<-throttle
-	fmt.Printf("== calling GetRecentTracks %+v\n", params)
-	fmt.Printf("== [%s]\n", time.Now())
-	recentTracks, err := api.User.GetRecentTracks(params)
-
-	if err != nil {
-		return nextState, tracks, err
-	}
-	fmt.Printf("got page %d/%d\n", recentTracks.Page, recentTracks.TotalPages)
-
-	// update the next state with totals from the response
-	// (these should not change during a traversal)
-	nextState.TotalPages = recentTracks.TotalPages
-	nextState.TotalTracks = recentTracks.Total
-
-	maxUTS, tracks := processResponse(recentTracks)
-
-	nextState.Page = recentTracks.Page + 1
-	nextState.From = current.From
-	if current.To != 0 {
-		nextState.To = current.To
-	} else {
-		// must be initial call, so need to find maxUTS from the response
-		// use 1 greater than the maxUTS or the first track will be excluded
-		nextState.To = maxUTS + 1
-	}
-
-	return nextState, tracks, nil
-}
-
-func writeCheckpoint(path string, state traversalState) error {
-	jout, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	err = ioutil.WriteFile(path, jout, 0644)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func checkpointExists() bool {
-	return util.FileExists(checkpointFilename)
-}
-
-func resumeCheckpoint() (traversalState, error) {
-	newState := traversalState{}
-
-	dat, err := ioutil.ReadFile(checkpointFilename)
-	if err != nil {
-		return newState, err
-	}
-
-	if err := json.Unmarshal(dat, &newState); err != nil {
-		return newState, err
-	}
-	return newState, nil
 }
 
 // LastFMCredentials holds all of a user's API login credentials
@@ -184,20 +68,21 @@ func (fr *FetchResults) errorMsg(message string) {
 // FetchLatestScrobbles downloads scrobbles for a given user account
 // an error being returned means no updates were done, but FetchResults being returned
 // doesn't mean that no errors occurred (i.e. the update may be incomplete)
-func FetchLatestScrobbles(db *m.Database, creds LastFMCredentials, opts FetchOptions) (FetchResults, error) {
+func (this *Fetcher) FetchLatestScrobbles(opts FetchOptions) (FetchResults, error) {
 	var err error
 	fetchResults := FetchResults{
 		Complete: false,
 	}
 
 	// returns err on nonexistent/corrupt db, zero val on empty db
-	latestDBTime, err := db.FindLatestTimestamp()
+	latestDBTime, err := this.db.FindLatestTimestamp()
 	if err != nil {
 		return fetchResults, err
 	}
 
-	api = lastfm.New(creds.APIKey, creds.APISecret)
-	throttle = time.Tick(time.Duration(opts.APIThrottleDelay) * time.Second)
+	// XXX maybe clean up old ticker if it still exists? otherwise the fetcher is
+	// single-shot
+	this.throttle = time.Tick(time.Duration(opts.APIThrottleDelay) * time.Second)
 
 	/*
 		three choices for start state:
@@ -222,7 +107,7 @@ func FetchLatestScrobbles(db *m.Database, creds LastFMCredentials, opts FetchOpt
 		if err != nil {
 			return fetchResults, errors.New("error resuming checkpoint")
 		}
-		if state.Database != db.Path {
+		if state.Database != this.db.Path {
 			return fetchResults, errors.New("recovering from checkpoint from different database")
 		}
 	} else if latestDBTime > 0 {
@@ -230,15 +115,15 @@ func FetchLatestScrobbles(db *m.Database, creds LastFMCredentials, opts FetchOpt
 		fmt.Printf("latest db time:%d [%v]\n", latestDBTime, time.Unix(latestDBTime, 0).UTC()) // XXX
 		// use 1 greater than the max time or the latest track will be duplicated
 		state = traversalState{
-			User:     creds.Username,
-			Database: db.Path,
+			User:     this.creds.Username,
+			Database: this.db.Path,
 			From:     latestDBTime + 1,
 		}
 	} else {
 		fmt.Println("doing initial download for new database")
 		state = traversalState{
-			User:     creds.Username,
-			Database: db.Path,
+			User:     this.creds.Username,
+			Database: this.db.Path,
 		}
 	}
 	fmt.Printf("start state: %+v\n", state)
@@ -250,7 +135,7 @@ func FetchLatestScrobbles(db *m.Database, creds LastFMCredentials, opts FetchOpt
 	requestLimit := opts.RequestLimit
 
 	for !done {
-		newState, tracks, err := getNextTracks(state)
+		newState, tracks, err := getNextTracks(this, state)
 		fetchResults.RequestCount++
 
 		if err != nil {
@@ -277,7 +162,7 @@ func FetchLatestScrobbles(db *m.Database, creds LastFMCredentials, opts FetchOpt
 		// XXX review error handling here
 		// XXX can StoreActivity return database ids?
 		fmt.Printf("* got %d tracks\n", len(tracks))
-		err = db.StoreActivity(tracks)
+		err = this.db.StoreActivity(tracks)
 		if err != nil {
 			fetchResults.error(err)
 			fmt.Println("error saving tracks")

@@ -41,12 +41,15 @@ func main() {
 		panic("Must set LASTFM_USERNAME, LASTFM_API_KEY and LASTFM_API_SECRET environment vars")
 	}
 
-	res, err := update.FetchLatestScrobbles(db,
+	fetcher := update.CreateFetcher(db,
 		update.LastFMCredentials{
 			APIKey:    APIKey,
 			APISecret: APISecret,
 			Username:  Username,
 		},
+	)
+
+	res, err := fetcher.FetchLatestScrobbles(
 		update.FetchOptions{
 			APIThrottleDelay: *delayPtr,
 			RequestLimit:     *limitPtr,
