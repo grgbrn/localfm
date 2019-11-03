@@ -1,24 +1,24 @@
 package web
 
 import (
-	"database/sql"
 	"log"
 	"net/http"
 	"time"
 
+	m "bitbucket.org/grgbrn/localfm/pkg/model"
 	"github.com/golangcollege/sessions"
 	"github.com/justinas/alice"
 )
 
 type Application struct {
-	db      *sql.DB
+	db      *m.Database
 	err     *log.Logger
 	info    *log.Logger
 	session *sessions.Session
 	Mux     http.Handler
 }
 
-func CreateApp(db *sql.DB, sessionSecret string, info, err *log.Logger) (*Application, error) {
+func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Application, error) {
 
 	session := sessions.New([]byte(sessionSecret))
 	session.Lifetime = 24 * 7 * time.Hour

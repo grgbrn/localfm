@@ -43,7 +43,7 @@ func main() {
 		panic("SESSION_SECRET must contain 32 bytes")
 	}
 
-	app, err := web.CreateApp(db.SQL, sessionSecret, infoLog, errorLog)
+	app, err := web.CreateApp(db, sessionSecret, infoLog, errorLog)
 	if err != nil {
 		panic(err)
 	}

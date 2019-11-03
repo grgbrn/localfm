@@ -173,7 +173,7 @@ func (app *Application) topArtistsData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	artists, err := query.TopArtists(app.db, params)
+	artists, err := query.TopArtists(app.db.SQL, params)
 	if err != nil {
 		app.serverError(w, err)
 		return
@@ -203,7 +203,7 @@ func (app *Application) topNewArtistsData(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	artists, err := query.TopNewArtists(app.db, params)
+	artists, err := query.TopNewArtists(app.db.SQL, params)
 	if err != nil {
 		app.serverError(w, err)
 		return
@@ -232,7 +232,7 @@ func (app *Application) topTracksData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	topTracks, err := query.TopTracks(app.db, params)
+	topTracks, err := query.TopTracks(app.db.SQL, params)
 	if err != nil {
 		app.serverError(w, err)
 		return
@@ -278,7 +278,7 @@ func (app *Application) recentTracksData(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	recentTracks, err := query.RecentTracks(app.db, offset, count)
+	recentTracks, err := query.RecentTracks(app.db.SQL, offset, count)
 	if err != nil {
 		app.serverError(w, err)
 		return
@@ -306,7 +306,7 @@ func (app *Application) listeningClockData(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	clock, err := query.ListeningClock(app.db, params)
+	clock, err := query.ListeningClock(app.db.SQL, params)
 	if err != nil {
 		app.serverError(w, err)
 		return
