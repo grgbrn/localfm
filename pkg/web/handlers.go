@@ -1,4 +1,4 @@
-package main
+package web
 
 import (
 	"errors"
@@ -13,7 +13,7 @@ import (
 //
 // login pages
 //
-func (app *application) loginUser(w http.ResponseWriter, r *http.Request) {
+func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		renderTemplate(w, "login", &templateData{})
 	} else if r.Method == "POST" {
@@ -52,7 +52,7 @@ func (app *application) loginUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *application) logoutUser(w http.ResponseWriter, r *http.Request) {
+func (app *Application) logoutUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Internal Server Error", http.StatusBadRequest)
 		return
@@ -158,7 +158,7 @@ func extractDateRangeParams(r *http.Request) (query.DateRangeParams, error) {
 //
 // json data handlers
 //
-func (app *application) topArtistsData(w http.ResponseWriter, r *http.Request) {
+func (app *Application) topArtistsData(w http.ResponseWriter, r *http.Request) {
 
 	type topArtistsResponse struct {
 		Mode      string               `json:"mode"`
@@ -187,7 +187,7 @@ func (app *application) topArtistsData(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (app *application) topNewArtistsData(w http.ResponseWriter, r *http.Request) {
+func (app *Application) topNewArtistsData(w http.ResponseWriter, r *http.Request) {
 
 	// xxx duplicate of topArtistsResponse
 	type topNewArtistsResponse struct {
@@ -217,7 +217,7 @@ func (app *application) topNewArtistsData(w http.ResponseWriter, r *http.Request
 	})
 }
 
-func (app *application) topTracksData(w http.ResponseWriter, r *http.Request) {
+func (app *Application) topTracksData(w http.ResponseWriter, r *http.Request) {
 
 	type topTracksResponse struct {
 		Mode      string              `json:"mode"`
@@ -246,7 +246,7 @@ func (app *application) topTracksData(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (app *application) recentTracksData(w http.ResponseWriter, r *http.Request) {
+func (app *Application) recentTracksData(w http.ResponseWriter, r *http.Request) {
 
 	// don't think i need anything as complicated as the full dateRangeParams here
 	// so just use a simple offset/count scheme
@@ -291,7 +291,7 @@ func (app *application) recentTracksData(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-func (app *application) listeningClockData(w http.ResponseWriter, r *http.Request) {
+func (app *Application) listeningClockData(w http.ResponseWriter, r *http.Request) {
 
 	type listeningClockResponse struct {
 		Mode      string               `json:"mode"`

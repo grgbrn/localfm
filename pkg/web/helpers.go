@@ -1,4 +1,4 @@
-package main
+package web
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 
 const logStackTraces bool = false
 
-func (app *application) serverError(w http.ResponseWriter, err error) {
+func (app *Application) serverError(w http.ResponseWriter, err error) {
 	if logStackTraces {
 		// from "let's go" ch3.04
 		// XXX but this could use some tweaking
@@ -116,6 +116,6 @@ func authenticateUser(email, passwd string) (int, error) {
 	return userID, nil
 }
 
-func (app *application) isAuthenticated(r *http.Request) bool {
+func (app *Application) isAuthenticated(r *http.Request) bool {
 	return app.session.Exists(r, "authenticatedUserID")
 }

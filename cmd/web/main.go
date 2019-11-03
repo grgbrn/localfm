@@ -2,24 +2,14 @@ package main
 
 import (
 	"crypto/rand"
-	"database/sql"
 	"log"
 	"net/http"
 	"os"
-	"time"
-
-	"github.com/golangcollege/sessions"
-	"github.com/justinas/alice"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
+	"bitbucket.org/grgbrn/localfm/pkg/web"
 )
 
-type application struct {
-	db      *sql.DB
-	err     *log.Logger
-	info    *log.Logger
-	session *sessions.Session
-}
 
 func main() {
 	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
@@ -52,61 +42,20 @@ func main() {
 	if len(sessionSecret) != 32 {
 		panic("SESSION_SECRET must contain 32 bytes")
 	}
-	session := sessions.New([]byte(sessionSecret))
-	session.Lifetime = 24 * 7 * time.Hour
 
-	//
-	// Initialize a new instance of application containing the dependencies.
-	//
-	app := &application{
-		db:      db.SQL,
-		info:    infoLog,
-		err:     errorLog,
-		session: session,
+	app, err := web.CreateApp(db.SQL, sessionSecret, infoLog, errorLog)
+	if err != nil {
+		panic(err)
 	}
-
-	//
-	// create middleware chains
-	//
-	standardMiddleware := alice.New(app.logRequest, secureHeaders)
-	dynamicMiddleware := standardMiddleware.Append(app.session.Enable)
-	protectedMiddleware := dynamicMiddleware.Append(app.requireAuthentication)
-	dataMiddleware := dynamicMiddleware.Append(app.requireAPIAuth)
-
-	//
-	// create a new ServeMux and register handlers
-	//
-	mux := http.NewServeMux()
-
-	// login/logout
-	mux.Handle("/login", dynamicMiddleware.ThenFunc(app.loginUser))
-	mux.Handle("/logout", dynamicMiddleware.ThenFunc(app.logoutUser))
-
-	// app pages
-	mux.Handle("/", protectedMiddleware.ThenFunc(index))
-	mux.Handle("/recent", protectedMiddleware.ThenFunc(recentPage))
-	mux.Handle("/tracks", protectedMiddleware.ThenFunc(tracksPage))
-	mux.Handle("/artists", protectedMiddleware.ThenFunc(artistsPage))
-
-	// data calls
-	mux.Handle("/data/topArtists", dataMiddleware.ThenFunc(app.topArtistsData))
-	mux.Handle("/data/topNewArtists", dataMiddleware.ThenFunc(app.topNewArtistsData))
-	mux.Handle("/data/topTracks", dataMiddleware.ThenFunc(app.topTracksData))
-	mux.Handle("/data/listeningClock", dataMiddleware.ThenFunc(app.listeningClockData))
-	mux.Handle("/data/recentTracks", dataMiddleware.ThenFunc(app.recentTracksData))
-
-	// set up static file server to ignore /ui/static/ prefix
-	fileServer := http.FileServer(http.Dir("./ui/static/"))
-	mux.Handle("/static/", http.StripPrefix("/static", fileServer))
 
 	addr := ":4000" // XXX
 	srv := &http.Server{
 		Addr:     addr,
-		ErrorLog: app.err,
-		Handler:  standardMiddleware.Then(mux),
+		ErrorLog: errorLog,
+		Handler:  app.Mux,
 	}
 
-	app.info.Printf("Starting server on %s\n", addr)
+	infoLog.Printf("Starting server on %s\n", addr)
 	err = srv.ListenAndServe()
-	app.err.Fatal(err)
+	errorLog.Fatal(err)
 }

@@ -1,4 +1,4 @@
-package main
+package web
 
 import (
 	"net/http"
@@ -15,7 +15,7 @@ func secureHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func (app *application) logRequest(next http.Handler) http.Handler {
+func (app *Application) logRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		app.info.Printf("%s - %s %s %s", r.RemoteAddr, r.Proto, r.Method, r.URL.RequestURI())
 
@@ -23,7 +23,7 @@ func (app *application) logRequest(next http.Handler) http.Handler {
 	})
 }
 
-func (app *application) requireAuthentication(next http.Handler) http.Handler {
+func (app *Application) requireAuthentication(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// If the user is not authenticated, redirect them to the login page and // return from the middleware chain so that no subsequent handlers in
 		// the chain are executed.
@@ -39,7 +39,7 @@ func (app *application) requireAuthentication(next http.Handler) http.Handler {
 	})
 }
 
-func (app *application) requireAPIAuth(next http.Handler) http.Handler {
+func (app *Application) requireAPIAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// If the user is not authenticated, redirect them to the login page and // return from the middleware chain so that no subsequent handlers in
 		// the chain are executed.
