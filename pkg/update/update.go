@@ -2,7 +2,6 @@ package update
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -16,18 +15,19 @@ import (
 // Fetcher contains all of the context necessary to download new scrobbles
 type Fetcher struct {
 	db       *m.Database
-	log      log.Logger
+	log      *log.Logger
 	creds    LastFMCredentials
 	lastfm   *lastfm.Api
 	throttle <-chan time.Time
 }
 
 // CreateFetcher makes a new Fetcher
-func CreateFetcher(db *m.Database, creds LastFMCredentials) *Fetcher {
+func CreateFetcher(db *m.Database, logger *log.Logger, creds LastFMCredentials) *Fetcher {
 	api := lastfm.New(creds.APIKey, creds.APISecret)
 
 	return &Fetcher{
 		db:     db,
+		log: 	logger,
 		creds:  creds,
 		lastfm: api,
 	}
@@ -102,7 +102,7 @@ func (this *Fetcher) FetchLatestScrobbles(opts FetchOptions) (FetchResults, erro
 	var state traversalState
 
 	if checkpointExists() {
-		fmt.Println("resuming from checkpoint file")
+		this.log.Println("resuming from checkpoint file")
 		state, err = resumeCheckpoint()
 		if err != nil {
 			return fetchResults, errors.New("error resuming checkpoint")
@@ -111,8 +111,8 @@ func (this *Fetcher) FetchLatestScrobbles(opts FetchOptions) (FetchResults, erro
 			return fetchResults, errors.New("recovering from checkpoint from different database")
 		}
 	} else if latestDBTime > 0 {
-		fmt.Println("doing incremental update")
-		fmt.Printf("latest db time:%d [%v]\n", latestDBTime, time.Unix(latestDBTime, 0).UTC()) // XXX
+		this.log.Println("doing incremental update")
+		this.log.Printf("latest db time:%d [%v]\n", latestDBTime, time.Unix(latestDBTime, 0).UTC()) // XXX
 		// use 1 greater than the max time or the latest track will be duplicated
 		state = traversalState{
 			User:     this.creds.Username,
@@ -120,13 +120,13 @@ func (this *Fetcher) FetchLatestScrobbles(opts FetchOptions) (FetchResults, erro
 			From:     latestDBTime + 1,
 		}
 	} else {
-		fmt.Println("doing initial download for new database")
+		this.log.Println("doing initial download for new database")
 		state = traversalState{
 			User:     this.creds.Username,
 			Database: this.db.Path,
 		}
 	}
-	fmt.Printf("start state: %+v\n", state)
+	this.log.Printf("start state: %+v\n", state)
 
 	errCount := 0 // number of successive errors
 	maxRetries := 3
@@ -142,16 +142,16 @@ func (this *Fetcher) FetchLatestScrobbles(opts FetchOptions) (FetchResults, erro
 			errCount++
 			// XXX use golang 1.13 error wrapping?
 			fetchResults.error(err)
-			fmt.Println("Error on api call:")
-			fmt.Println(err)
+			this.log.Println("Error on api call:")
+			this.log.Println(err)
 
 			if errCount > maxRetries {
-				fmt.Println("Giving up after max retries")
+				this.log.Println("Giving up after max retries")
 				fetchResults.errorMsg("Giving up after max retries")
 				break
 			} else {
 				backoff := util.Pow(2, errCount+1)
-				fmt.Printf("Retrying in %d seconds\n", backoff)
+				this.log.Printf("Retrying in %d seconds\n", backoff)
 				time.Sleep(time.Duration(backoff) * time.Second)
 				continue
 			}
@@ -161,19 +161,19 @@ func (this *Fetcher) FetchLatestScrobbles(opts FetchOptions) (FetchResults, erro
 
 		// XXX review error handling here
 		// XXX can StoreActivity return database ids?
-		fmt.Printf("* got %d tracks\n", len(tracks))
+		this.log.Printf("* got %d tracks\n", len(tracks))
 		err = this.db.StoreActivity(tracks)
 		if err != nil {
 			fetchResults.error(err)
-			fmt.Println("error saving tracks")
-			fmt.Println(err)
+			this.log.Println("error saving tracks")
+			this.log.Println(err)
 			break
 		}
 		fetchResults.NewItems += len(tracks)
 
 		// write checkpoint and update state only if there
 		// were no errors processing the items
-		fmt.Printf("* new state: %+v\n", newState)
+		this.log.Printf("* new state: %+v\n", newState)
 		if !newState.isComplete() {
 			writeCheckpoint(checkpointFilename, newState)
 			state = newState
@@ -186,7 +186,7 @@ func (this *Fetcher) FetchLatestScrobbles(opts FetchOptions) (FetchResults, erro
 		// been written so it's safe to resume
 		if requestLimit > 0 && fetchResults.RequestCount >= requestLimit {
 			fetchResults.errorMsg("request limit exceeded, exiting")
-			fmt.Println("request limit exceeded, exiting")
+			this.log.Println("request limit exceeded, exiting")
 			break
 		}
 	}
@@ -199,8 +199,9 @@ func (this *Fetcher) FetchLatestScrobbles(opts FetchOptions) (FetchResults, erro
 			// XXX golang 1.13 error wrapping?
 			// XXX also, does this count as incomplete?
 			fetchResults.error(err)
-			fmt.Println("error removing checkpoint file. manually clean this up before next run")
+			this.log.Println("error removing checkpoint file. manually clean this up before next run")
 		}
 	}
+	this.log.Printf("%+v\n", fetchResults)
 	return fetchResults, nil
 }

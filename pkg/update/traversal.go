@@ -1,7 +1,6 @@
 package update
 
 import (
-	"fmt"
 	"time"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
@@ -77,14 +76,14 @@ func getNextTracks(fetcher *Fetcher, current traversalState) (traversalState, []
 
 	// blocking read from rate-limit channel
 	<-fetcher.throttle
-	fmt.Printf("== calling GetRecentTracks %+v\n", params)
-	fmt.Printf("== [%s]\n", time.Now())
+	fetcher.log.Printf("== calling GetRecentTracks %+v\n", params)
+	fetcher.log.Printf("== [%s]\n", time.Now())
 	recentTracks, err := fetcher.lastfm.User.GetRecentTracks(params)
 
 	if err != nil {
 		return nextState, tracks, err
 	}
-	fmt.Printf("got page %d/%d\n", recentTracks.Page, recentTracks.TotalPages)
+	fetcher.log.Printf("got page %d/%d\n", recentTracks.Page, recentTracks.TotalPages)
 
 	// update the next state with totals from the response
 	// (these should not change during a traversal)

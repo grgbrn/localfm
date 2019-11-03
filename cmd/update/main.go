@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"os"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
@@ -14,7 +16,10 @@ func main() {
 	delayPtr := flag.Int("delay", 5, "Delay in seconds between API calls")
 	limitPtr := flag.Int("limit", 0, "Limit number of API calls")
 
-	dupePtr := flag.Bool("duplicates", false, "Check entire database for duplicates")
+	logfilePtr := flag.String("logfile", "", "Log to a file")
+	quietPtr := flag.Bool("quiet", false, "Don't print to stdout")
+
+	//dupePtr := flag.Bool("duplicates", false, "Check entire database for duplicates")
 
 	flag.Parse()
 
@@ -41,7 +46,26 @@ func main() {
 		panic("Must set LASTFM_USERNAME, LASTFM_API_KEY and LASTFM_API_SECRET environment vars")
 	}
 
+	//
+	// create logger
+	//
+	var outputs = make([]io.Writer, 0)
+	if !*quietPtr {
+		outputs = append(outputs, os.Stdout)
+	}
+	if *logfilePtr != "" {
+		f, err := os.Create(*logfilePtr)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		outputs = append(outputs, f)
+	}
+	tee := io.MultiWriter(outputs...)
+	teeLog := log.New(tee, "", log.Ldate|log.Ltime)
+
 	fetcher := update.CreateFetcher(db,
+		teeLog,
 		update.LastFMCredentials{
 			APIKey:    APIKey,
 			APISecret: APISecret,
@@ -53,7 +77,7 @@ func main() {
 		update.FetchOptions{
 			APIThrottleDelay: *delayPtr,
 			RequestLimit:     *limitPtr,
-			CheckDuplicates:  *dupePtr,
+			CheckDuplicates:  false,
 		},
 	)
 	if err != nil {
