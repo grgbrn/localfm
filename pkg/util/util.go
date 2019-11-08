@@ -1,7 +1,12 @@
 package util
 
-import "os"
+import (
+	"fmt"
+	"os"
+	"strconv"
+)
 
+// FileExists checks for presence of a filepath
 func FileExists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
@@ -31,4 +36,49 @@ func InterfaceSliceInt64(data []int64) []interface{} {
 		interfaceSlice[i] = d
 	}
 	return interfaceSlice
+}
+
+// GetEnvStr loads an environment variable as a string, returning a default value if unset
+func GetEnvStr(name, missing string) string {
+	val := os.Getenv(name)
+	if val == "" {
+		return missing
+	}
+	return val
+}
+
+// GetEnvInt loads an environment variable as a int, returning a default value if unset
+func GetEnvInt(name string, missing int) int {
+	val := os.Getenv(name)
+	if val == "" {
+		return missing
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		fmt.Printf("Error parsing %s as an int: %s", name, val)
+		return missing
+	}
+	return n
+}
+
+// MustGetEnvStr loads a environment variable as a string or panics
+func MustGetEnvStr(name string) string {
+	val := os.Getenv(name)
+	if val == "" {
+		panic(fmt.Sprintf("Must set %s", name))
+	}
+	return val
+}
+
+// MustGetEnvInt loads an environment variable as an int or panics
+func MustGetEnvInt(name string) int {
+	val := os.Getenv(name)
+	if val == "" {
+		panic(fmt.Sprintf("Must set %s", name))
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		panic(fmt.Sprintf("Error parsing %s as an int: %s", name, val))
+	}
+	return n
 }

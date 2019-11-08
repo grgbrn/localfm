@@ -2,27 +2,23 @@ package main
 
 import (
 	"crypto/rand"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 
-	m "bitbucket.org/grgbrn/localfm/pkg/model"
+	"bitbucket.org/grgbrn/localfm/pkg/model"
+	"bitbucket.org/grgbrn/localfm/pkg/update"
+	"bitbucket.org/grgbrn/localfm/pkg/util"
 	"bitbucket.org/grgbrn/localfm/pkg/web"
 )
-
 
 func main() {
 	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
 	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
 
-	//
 	// database init
-	//
-	DSN := os.Getenv("DSN")
-	if DSN == "" {
-		panic("Must set DSN environment var")
-	}
-	db, err := m.Open(DSN)
+	db, err := model.Open(util.MustGetEnvStr("DSN"))
 	if err != nil {
 		panic(err)
 	}
@@ -43,12 +39,33 @@ func main() {
 		panic("SESSION_SECRET must contain 32 bytes")
 	}
 
+	// create webapp
 	app, err := web.CreateApp(db, sessionSecret, infoLog, errorLog)
 	if err != nil {
 		panic(err)
 	}
 
-	addr := ":4000" // XXX
+	// load lastfm credentials
+	lastfmCreds := update.LastFMCredentials{
+		APIKey:    util.MustGetEnvStr("LASTFM_API_KEY"),
+		APISecret: util.MustGetEnvStr("LASTFM_API_SECRET"),
+		Username:  util.MustGetEnvStr("LASTFM_USERNAME"),
+
+	}
+
+	// start goroutine to kick off periodic updates of lastfm data
+	var updateLogDir = util.GetEnvStr("UPDATE_LOGIDR", "/tmp/updatelogs")
+	err = os.MkdirAll(updateLogDir, 0755)
+	if err != nil {
+		panic(err)
+	}
+	go app.PeriodicUpdate(
+		util.GetEnvInt("UPDATE_FREQUENCY_MINUTES", 60),
+		updateLogDir,
+		lastfmCreds)
+
+	// create & run the webserver on the main goroutine
+	addr := fmt.Sprintf(":%d", util.GetEnvInt("HTTP_PORT", 4000))
 	srv := &http.Server{
 		Addr:     addr,
 		ErrorLog: errorLog,
