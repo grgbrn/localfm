@@ -6,9 +6,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"runtime/debug"
+	"strings"
 	"text/template"
 
+	"bitbucket.org/grgbrn/localfm/pkg/util"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -39,7 +42,11 @@ type templateData struct {
 func renderTemplate(w http.ResponseWriter, tmpl string, td *templateData) {
 	// xxx factor this out & clean it up
 	// first elt in array is the main template, others are deps
-	prefix := "./ui/html/"
+	fileRoot := util.GetEnvStr("STATIC_FILE_ROOT", ".")
+	prefix := path.Join(fileRoot, "ui/html/")
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
 	files := []string{
 		prefix + tmpl + ".page.tmpl",
 		prefix + "base.layout.tmpl",

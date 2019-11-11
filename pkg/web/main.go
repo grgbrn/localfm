@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
 	"bitbucket.org/grgbrn/localfm/pkg/update"
+	"bitbucket.org/grgbrn/localfm/pkg/util"
 
 	"github.com/golangcollege/sessions"
 	"github.com/justinas/alice"
@@ -72,7 +74,12 @@ func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Ap
 	mux.Handle("/data/recentTracks", dataMiddleware.ThenFunc(app.recentTracksData))
 
 	// set up static file server to ignore /ui/static/ prefix
-	fileServer := http.FileServer(http.Dir("./ui/static/"))
+	fileRoot := util.GetEnvStr("STATIC_FILE_ROOT", ".")
+	prefix := path.Join(fileRoot, "ui/static/")
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	fileServer := http.FileServer(http.Dir(prefix))
 	mux.Handle("/static/", http.StripPrefix("/static", fileServer))
 
 	app.Mux = standardMiddleware.Then(mux)
@@ -119,7 +126,7 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 	}
 }
 
-func  (app *Application) doUpdate(baseLogDir string, credentials update.LastFMCredentials) error {
+func (app *Application) doUpdate(baseLogDir string, credentials update.LastFMCredentials) error {
 
 	// create a datestamped logfile in our logdir for this update
 	// 2019/11/03 16:05:44  ->  20191103_160544
