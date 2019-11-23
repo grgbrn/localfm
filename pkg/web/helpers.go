@@ -98,11 +98,11 @@ func authenticateUser(email, passwd string) (int, error) {
 	const userID = 100
 	envLogin := os.Getenv("LOGIN_USER")
 	if envLogin == "" {
-		panic("Must set LOGIN_USER environment var")
+		log.Println("Warning: LOGIN_USER environment var is not set")
 	}
 	envPass := os.Getenv("LOGIN_PASSWD")
-	if envLogin == "" {
-		panic("Must set LOGIN_PASSWD environment var")
+	if envPass == "" {
+		log.Println("Warning: LOGIN_PASSWD environment var is not set")
 	}
 
 	if envLogin != email {

@@ -19,8 +19,8 @@ func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 	} else if r.Method == "POST" {
 		err := r.ParseForm()
 		if err != nil {
+			app.err.Printf("Login error:%v", err)
 			// XXX should be client error
-			// http.StatusBadRequest
 			http.Error(w, "Internal Server Error", http.StatusBadRequest)
 			return
 		}
@@ -31,6 +31,7 @@ func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 
 		userID, err := authenticateUser(email, passwd)
 		if err != nil {
+			app.err.Printf("Authentication error:%v", err)
 			http.Error(w, "Internal Server Error", http.StatusBadRequest)
 			return
 		}
@@ -53,7 +54,8 @@ func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Application) logoutUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
+	// XXX shouldn't allow GET but there's no account mgt page yet
+	if r.Method != "POST" && r.Method != "GET" {
 		http.Error(w, "Internal Server Error", http.StatusBadRequest)
 		return
 	}
