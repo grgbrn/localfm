@@ -669,6 +669,37 @@ function initRecentPage() {
     // do the initial data refresh, which will cause the
     // widgets to be updated with newly fetched data
     page.refreshData()
+
+    // start websocket connection
+    console.log("starting websocket connection...")
+    let ws = new WebSocket('ws://' + window.location.host + '/ws');
+
+    ws.addEventListener('open', e => {
+        console.log("websocket connection opened")
+    })
+    ws.addEventListener('close', e => {
+        // XXX flesh out close behavior
+        // XXX should wait a bit and try to reconnect
+        console.log("websocket connection closed")
+    })
+    ws.addEventListener('message', function(e) {
+        console.log("got a message from the server:")
+        var msg = JSON.parse(e.data)
+        console.log(msg)
+    })
+    ws.addEventListener('error', e => {
+        // XXX flesh out error behavior
+        console.log("websocket error!")
+    })
+
+    // XXX this should really be attached to a button
+    window.refreshTracks = function(message) {
+        ws.send(JSON.stringify({
+                    username: "grgbrn", // XXX how does javascript know this?
+                    message: message
+                }
+        ));
+    }
 }
 
 /// xxx junk drawer

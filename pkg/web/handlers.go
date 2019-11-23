@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gorilla/websocket"
+
 	"bitbucket.org/grgbrn/localfm/pkg/query"
 )
 
@@ -320,4 +322,75 @@ func (app *Application) listeningClockData(w http.ResponseWriter, r *http.Reques
 		EndDate:   params.End,
 		Clock:     clock,
 	})
+}
+
+//
+// websocket handler
+//
+func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Request) {
+
+	// upgrade the GET to a websocket
+	upgrader := websocket.Upgrader{}
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		app.serverError(w, fmt.Errorf("Error upgrading websocket:%v\n", err))
+		return
+	}
+	defer ws.Close()
+
+	// register the new client. should store:
+	// - logged in user
+	// - remote address
+	// - user agent
+	// - connection time
+	// - last activity
+	// - ?? channel of some sort? or is that implicit in the goroutine closure?
+
+	// XXX i should finish stubbing out my user auth mockup
+	// XXX may also want a whoami call
+	// userId := app.session.GetInt(r, "authenticatedUserID")
+	// app.info.Printf("connection for user:%d\n", userId)
+
+	app.info.Printf("new client:%s\n", wsStr(ws))
+	app.info.Printf(r.UserAgent())
+
+	app.websocketClients.Lock()
+	app.websocketClients.m[ws] = true
+	app.info.Printf("total clients:%d\n", len(app.websocketClients.m))
+	app.websocketClients.Unlock()
+
+	// this goroutine is responsible for registering/unregistering
+	// it's interest in updates for a specific user
+	// it's this call that increases the freqency of polling for that user
+
+	// when it gets updates for that user, it needs to send them to the browser
+
+	// it can also get requests from the browser to do an immediate update
+	for {
+		var msg Message
+		// read in a new message as json and map it to a Message
+		err := ws.ReadJSON(&msg)
+		if err != nil {
+			app.info.Printf("error: %v (removing client)\n", err)
+			app.websocketClients.Lock()
+			delete(app.websocketClients.m, ws)
+			app.websocketClients.Unlock()
+			break
+		}
+		// send the newly received message to the broadcast channel
+		app.info.Printf("client %s posted a message:%v\n", wsStr(ws), msg)
+		//		broadcast <- msg
+	}
+}
+
+func wsStr(ws *websocket.Conn) string {
+	ra := ws.RemoteAddr()
+	return fmt.Sprintf("%s", ra)
+}
+
+// XXX sample message
+// XXX add timestamp? localtime? timezone?
+type Message struct {
+	Username string `json:"username"`
+	Message  string `json:"message"`
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
@@ -15,6 +16,7 @@ import (
 	"bitbucket.org/grgbrn/localfm/pkg/util"
 
 	"github.com/golangcollege/sessions"
+	"github.com/gorilla/websocket"
 	"github.com/justinas/alice"
 )
 
@@ -26,25 +28,32 @@ type Application struct {
 	Mux     http.Handler
 
 	updateChan chan bool
+
+	// synchronized access to map of clients
+	websocketClients struct {
+		sync.RWMutex
+		m map[*websocket.Conn]bool
+	}
 }
 
 func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Application, error) {
 
 	session := sessions.New([]byte(sessionSecret))
-	session.Lifetime = 24 * 7 * time.Hour
+	session.Lifetime = 24 * 7 * time.Hour // XXX config var
 
-	//
-	// Initialize a new instance of application containing the dependencies.
-	//
 	app := &Application{
 		db:      db,
 		info:    info,
 		err:     err,
 		session: session,
+		websocketClients: struct {
+			sync.RWMutex
+			m map[*websocket.Conn]bool
+		}{m: make(map[*websocket.Conn]bool)},
 	}
 
 	//
-	// create middleware chains
+	// create middleware chains to wrap handlers
 	//
 	standardMiddleware := alice.New(app.logRequest, secureHeaders)
 	dynamicMiddleware := standardMiddleware.Append(app.session.Enable)
@@ -72,6 +81,15 @@ func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Ap
 	mux.Handle("/data/topTracks", dataMiddleware.ThenFunc(app.topTracksData))
 	mux.Handle("/data/listeningClock", dataMiddleware.ThenFunc(app.listeningClockData))
 	mux.Handle("/data/recentTracks", dataMiddleware.ThenFunc(app.recentTracksData))
+
+	// websocket
+	// XXX dataMiddleware interferes with gorilla/websocket
+	// XXX (websocket: response does not implement http.Hijacker)
+	// XXX this means no authentication on websocket handler?
+	// XXX should probably manually implement app.session.Enable
+	// XXX and app.requireAPIAuth
+	//mux.Handle("/ws", dataMiddleware.ThenFunc(app.websocketConnection))
+	mux.HandleFunc("/ws", app.websocketConnection)
 
 	// set up static file server to ignore /ui/static/ prefix
 	fileRoot := util.GetEnvStr("STATIC_FILE_ROOT", ".")
