@@ -32,8 +32,10 @@ type Application struct {
 	// synchronized access to map of clients
 	websocketClients struct {
 		sync.RWMutex
-		m map[*websocket.Conn]bool
+		m map[*websocket.Conn]WebsocketClient
 	}
+
+	registeredClients map[WebsocketClient]chan string
 }
 
 func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Application, error) {
@@ -48,8 +50,9 @@ func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Ap
 		session: session,
 		websocketClients: struct {
 			sync.RWMutex
-			m map[*websocket.Conn]bool
-		}{m: make(map[*websocket.Conn]bool)},
+			m map[*websocket.Conn]WebsocketClient
+		}{m: make(map[*websocket.Conn]WebsocketClient)},
+		registeredClients: make(map[WebsocketClient]chan string),
 	}
 
 	//
@@ -139,7 +142,18 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 			continue
 		}
 
-		app.doUpdate(baseLogDir, credentials) // don't do anyting special on error
+		// XXX for now don't actually run updates
+		// app.doUpdate(baseLogDir, credentials) // don't do anyting special on error
+
+		fmt.Println("XXX simulating update for grgbrn")
+		updateResult := fmt.Sprintf("[ update at %s ]", time.Now().String())
+
+		// write the update to any registered channels
+		for client, updateChan := range app.registeredClients {
+			fmt.Printf("sending update to registered client:%s\n", client)
+			updateChan <- updateResult
+		}
+
 		lastRun = time.Now()
 	}
 }
@@ -179,5 +193,27 @@ func (app *Application) doUpdate(baseLogDir string, credentials update.LastFMCre
 	app.info.Printf("%+v\n", res)
 
 	// this will need to be able to return some kind of meaningful client info!
+	return nil
+}
+
+func (app *Application) registerForUpdates(client WebsocketClient) (chan string, error) {
+	// this fn needs to increase the fetch frequency for the client
+	// and create a new channel that will get a message when there
+	// are updates for that user
+	fmt.Printf(">> registering client:%s\n", client)
+	ch := make(chan string)
+	app.registeredClients[client] = ch
+	fmt.Printf(">> %d active clients\n", len(app.registeredClients))
+	return ch, nil
+}
+
+func (app *Application) deregisterForUpdates(client WebsocketClient) error {
+	// this fn needs to reduce the fetch frequency for the client
+	// and clean up / deregister the channel
+	fmt.Printf(">> deregistering client:%s\n", client)
+	ch := app.registeredClients[client]
+	delete(app.registeredClients, client)
+	close(ch)
+	fmt.Printf(">> %d clients remaining\n", len(app.registeredClients))
 	return nil
 }

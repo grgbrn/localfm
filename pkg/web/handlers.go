@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -338,54 +339,111 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 	}
 	defer ws.Close()
 
-	// register the new client. should store:
-	// - logged in user
-	// - remote address
-	// - user agent
-	// - connection time
-	// - last activity
-	// - ?? channel of some sort? or is that implicit in the goroutine closure?
+	// register the new client
+	wc := WebsocketClient{
+		RemoteAddress: ws.RemoteAddr(),
+		Username:      "grgbrn", // XXX
+		UserAgent:     r.UserAgent(),
+		ConnectedAt:   time.Now(),
+		LastActivity:  time.Now(),
+	}
+	app.info.Printf("new client:%+v\n", wc)
 
-	// XXX i should finish stubbing out my user auth mockup
-	// XXX may also want a whoami call
-	// userId := app.session.GetInt(r, "authenticatedUserID")
-	// app.info.Printf("connection for user:%d\n", userId)
-
-	app.info.Printf("new client:%s\n", wsStr(ws))
-	app.info.Printf(r.UserAgent())
-
+	// XXX wrap this up
 	app.websocketClients.Lock()
-	app.websocketClients.m[ws] = true
-	app.info.Printf("total clients:%d\n", len(app.websocketClients.m))
+	app.websocketClients.m[ws] = wc
 	app.websocketClients.Unlock()
+	app.info.Printf("total clients:%d\n", len(app.websocketClients.m))
 
 	// this goroutine is responsible for registering/unregistering
 	// it's interest in updates for a specific user
-	// it's this call that increases the freqency of polling for that user
+	// it's this call that increases the freqency of polling for that user (TODO)
+	updateChan, err := app.registerForUpdates(wc)
+	if err != nil {
+		panic("can't register client, not sure how to handle this")
+	}
+	defer app.deregisterForUpdates(wc)
 
 	// when it gets updates for that user, it needs to send them to the browser
-
 	// it can also get requests from the browser to do an immediate update
-	for {
-		var msg Message
-		// read in a new message as json and map it to a Message
-		err := ws.ReadJSON(&msg)
-		if err != nil {
-			app.info.Printf("error: %v (removing client)\n", err)
+	// only way to do this in go is select on channels, so the blocking reads
+	// of the websocket API need to turn into channel operations
+	clientMsgChan, clientErrChan := readFromWebSocket(ws)
+
+	clientActive := true
+	for clientActive {
+		var updateNotification string
+		var clientMessage Message
+		var clientError error
+
+		select {
+		case updateNotification = <-updateChan:
+			fmt.Println("== got an update notification")
+			fmt.Println(updateNotification)
+			err := ws.WriteJSON(Message{
+				Username: "Server",
+				Message:  updateNotification,
+			})
+			if err != nil {
+				// XXX should probably close and cleanup?
+				fmt.Println("!!! error writing message to client")
+			}
+
+		case clientMessage = <-clientMsgChan:
+			fmt.Println("=== got a client message")
+			fmt.Println(clientMessage)
+			if clientMessage.Message == "refresh" {
+				// post something to the update channel and see
+				// if it passes the minimum filter
+				// XXX would be nice to return an error to the client
+				// XXX if it doesn't work
+				app.updateChan <- true
+			} else {
+				fmt.Printf("ignoring unknown client message:%s\n", clientMessage.Message)
+			}
+		case clientError = <-clientErrChan:
+			app.info.Printf("removing client %s err=%v\n", wc, clientError)
+
+			// XXX wrap this up
 			app.websocketClients.Lock()
 			delete(app.websocketClients.m, ws)
 			app.websocketClients.Unlock()
-			break
+
+			clientActive = false
 		}
-		// send the newly received message to the broadcast channel
-		app.info.Printf("client %s posted a message:%v\n", wsStr(ws), msg)
-		//		broadcast <- msg
+		// XXX not sure if this is safe or not
+		wc.LastActivity = time.Now() // XXX race condition?
 	}
+	// XXX what kind of cleanup needs to happen here?
 }
 
-func wsStr(ws *websocket.Conn) string {
-	ra := ws.RemoteAddr()
-	return fmt.Sprintf("%s", ra)
+// read messages from the websocket and convert them to a channel
+// (so they can be used with select)
+// creates a new goroutine in the background which exits when the
+// websocket connection is closed
+func readFromWebSocket(ws *websocket.Conn) (chan Message, chan error) {
+	msgChan := make(chan Message)
+	errChan := make(chan error)
+
+	go func() {
+		done := false
+		for !done {
+			var msg Message
+			// read in a new message as json and map it to a Message
+			err := ws.ReadJSON(&msg)
+			if err != nil {
+				errChan <- err
+				done = true
+			} else {
+				msgChan <- msg
+			}
+		}
+		fmt.Println("readFromWebsocket goroutine exiting")
+		close(msgChan)
+		close(errChan)
+	}()
+
+	return msgChan, errChan
 }
 
 // XXX sample message
@@ -393,4 +451,17 @@ func wsStr(ws *websocket.Conn) string {
 type Message struct {
 	Username string `json:"username"`
 	Message  string `json:"message"`
+}
+
+type WebsocketClient struct {
+	RemoteAddress net.Addr
+	UserAgent     string
+
+	Username     string
+	ConnectedAt  time.Time
+	LastActivity time.Time
+}
+
+func (c WebsocketClient) String() string {
+	return fmt.Sprintf("%s@%s", c.Username, c.RemoteAddress)
 }
