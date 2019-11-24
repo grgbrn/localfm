@@ -23,14 +23,20 @@ type Application struct {
 	session *sessions.Session
 	Mux     http.Handler
 
-	updateChan chan bool
+	// updateChan regulates background updates. empty strings
+	// written to it indicate timed checks, strings containing
+	// usernames are update requests from connected clients
+	updateChan chan string
 
-	// synchronized access to map of clients
+	// synchronized access to map of websocket clients
 	websocketClients struct {
 		sync.RWMutex
 		m map[*websocket.Conn]WebsocketClient
 	}
 
+	// websocket clients registered to receive updates
+	// on a channel
+	// XXX revisit sync on this map
 	registeredClients map[WebsocketClient]chan string
 }
 

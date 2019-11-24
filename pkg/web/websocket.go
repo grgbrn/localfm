@@ -1,8 +1,10 @@
 package web
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -14,7 +16,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const maxUpdateFrequencyMinutes float64 = 5
+// hard throttle limit on how often we'll trigger an update
+// (note that this is unrelated to api call throttle!)
+const maxUpdateFrequencyMinutes float64 = 2
 
 type WebsocketClient struct {
 	RemoteAddress net.Addr
@@ -50,10 +54,13 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 	}
 	defer ws.Close()
 
+	// XXX need to figure this out somehow
+	currentUsername := "grgbrn"
+
 	// register the new client
 	wc := WebsocketClient{
 		RemoteAddress: ws.RemoteAddr(),
-		Username:      "grgbrn", // XXX
+		Username:      currentUsername,
 		UserAgent:     r.UserAgent(),
 		ConnectedAt:   time.Now(),
 		LastActivity:  time.Now(),
@@ -104,11 +111,12 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 			fmt.Println("=== got a client message")
 			fmt.Println(clientMessage)
 			if clientMessage.Message == "refresh" {
-				// post something to the update channel and see
-				// if it passes the minimum filter
+				// writing a string containing a username to the
+				// update channel triggers an update if it's
+				// below the minimum update threshold
 				// XXX would be nice to return an error to the client
-				// XXX if it doesn't work
-				app.updateChan <- true
+				// XXX if the update isn't going to happen
+				app.updateChan <- currentUsername
 			} else {
 				fmt.Printf("ignoring unknown client message:%s\n", clientMessage.Message)
 			}
@@ -157,51 +165,97 @@ func readFromWebSocket(ws *websocket.Conn) (chan Message, chan error) {
 	return msgChan, errChan
 }
 
+type PrintFunc func(string, ...interface{})
+
+func PrintNoOp(fmt string, v ...interface{}) {}
+
 // PeriodicUpdate is intended to be called in a long-running goroutine that
 // will occasionally call update to fetch new data from lastfm
 func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, credentials update.LastFMCredentials) error {
 	if app.updateChan != nil {
 		return errors.New("PeriodicUpdate can only be started once")
 	}
-	app.updateChan = make(chan bool)
+	app.updateChan = make(chan string)
 
-	// goroutine that ticks every N minutes (replaces cron)
+	inactiveDuration := time.Duration(updateFreq) * time.Minute
+	activeDuration := time.Duration(10) * time.Minute // XXX this should be configurable too
+
+	//var debug PrintFunc = PrintNoOp
+	var debug PrintFunc = app.info.Printf
+
+	// goroutine that ticks every minute. do this instead of time.sleep
+	// so that a connected user can trigger a wakeup
 	go func() {
-		ticker := time.NewTicker(time.Duration(updateFreq) * time.Minute)
+		ticker := time.NewTicker(1 * time.Minute)
 		for {
 			<-ticker.C
-			app.info.Println("Starting periodic update")
-			app.updateChan <- true
+			debug("tick")
+			app.updateChan <- ""
 		}
 	}()
-	app.info.Printf("Starting periodic updates every %d min\n", updateFreq)
 
-	var lastRun time.Time
+	app.info.Printf("Starting updates, active=%s, inactive=%s\n", activeDuration, inactiveDuration)
+
+	lastRunTimes, err := loadLastRunTimes()
+	if err != nil {
+		app.info.Printf("Couldn't load last run times:%v", err)
+		lastRunTimes = make(map[string]time.Time)
+	}
+	app.info.Printf("Loaded %d last run times", len(lastRunTimes))
 
 	for {
 		// wait for someone to post to the update channel
-		<-app.updateChan
+		updateRequest := <-app.updateChan
 
-		// simple throttle
-		if !lastRun.IsZero() && time.Since(lastRun).Minutes() < maxUpdateFrequencyMinutes {
-			app.info.Printf("Ignoring update request, most recent was only %f minutes ago (%f minimum)\n",
-				time.Since(lastRun).Minutes(), maxUpdateFrequencyMinutes)
-			continue
+		// if it's a user-generated request, update that user
+		// otherwise find the user who hasn't been updated in the
+		// longest time and see if they're due
+		// (active users should get priority though)
+		userRequestedUpdate := len(updateRequest) > 0
+		userToUpdate := "grgbrn" // MULTIUSER
+
+		lastRun := lastRunTimes[userToUpdate]
+		timeSinceLastRun := time.Since(lastRun)
+
+		debug("user=%s  lastRun=%v  ago=%v", userToUpdate, lastRun, timeSinceLastRun)
+
+		// simple throttle for maxUpdateFrequencyMinutes
+		if timeSinceLastRun.Minutes() < maxUpdateFrequencyMinutes {
+			// only log a message if it's a user-generated request
+			if userRequestedUpdate {
+				app.info.Printf("Ignoring update request, most recent was only %f minutes ago (%f minimum)\n",
+					timeSinceLastRun.Minutes(), maxUpdateFrequencyMinutes)
+			}
+			continue // next loop iteration
+		}
+
+		// see if it's time to run an update again, based on whether
+		// the user is active (only one user for now, so simple)
+		currentUpdateDuration := inactiveDuration
+		if len(app.registeredClients) > 0 {
+			currentUpdateDuration = activeDuration
+		}
+		debug("current update frequency:%v\n", currentUpdateDuration)
+
+		if timeSinceLastRun <= currentUpdateDuration {
+			debug("no user due for update")
+			continue // next loop iteration
 		}
 
 		// XXX for now don't actually run updates
 		// app.doUpdate(baseLogDir, credentials) // don't do anyting special on error
-
 		fmt.Println("XXX simulating update for grgbrn")
 		updateResult := fmt.Sprintf("[ update at %s ]", time.Now().String())
 
 		// write the update to any registered channels
+		// MULTIUSER filter this by users
 		for client, updateChan := range app.registeredClients {
 			fmt.Printf("sending update to registered client:%s\n", client)
 			updateChan <- updateResult
 		}
 
-		lastRun = time.Now()
+		lastRunTimes[userToUpdate] = time.Now()
+		saveLastRunTimes(lastRunTimes)
 	}
 }
 
@@ -247,20 +301,52 @@ func (app *Application) registerForUpdates(client WebsocketClient) (chan string,
 	// this fn needs to increase the fetch frequency for the client
 	// and create a new channel that will get a message when there
 	// are updates for that user
-	fmt.Printf(">> registering client:%s\n", client)
+	// fmt.Printf(">> registering client:%s\n", client)
 	ch := make(chan string)
 	app.registeredClients[client] = ch
-	fmt.Printf(">> %d active clients\n", len(app.registeredClients))
+	// fmt.Printf(">> %d active clients\n", len(app.registeredClients))
 	return ch, nil
 }
 
 func (app *Application) deregisterForUpdates(client WebsocketClient) error {
 	// this fn needs to reduce the fetch frequency for the client
 	// and clean up / deregister the channel
-	fmt.Printf(">> deregistering client:%s\n", client)
+	// fmt.Printf(">> deregistering client:%s\n", client)
 	ch := app.registeredClients[client]
 	delete(app.registeredClients, client)
 	close(ch)
-	fmt.Printf(">> %d clients remaining\n", len(app.registeredClients))
+	// fmt.Printf(">> %d clients remaining\n", len(app.registeredClients))
+	return nil
+}
+
+//
+// temporary until user db comes along
+//
+const lastRunFilename = "lastrun.json"
+
+func loadLastRunTimes() (map[string]time.Time, error) {
+	runtimes := make(map[string]time.Time)
+
+	dat, err := ioutil.ReadFile(lastRunFilename)
+	if err != nil {
+		return runtimes, err
+	}
+
+	if err := json.Unmarshal(dat, &runtimes); err != nil {
+		return runtimes, err
+	}
+	return runtimes, nil
+}
+
+func saveLastRunTimes(data map[string]time.Time) error {
+	jout, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(lastRunFilename, jout, 0644)
+	if err != nil {
+		return err
+	}
 	return nil
 }
