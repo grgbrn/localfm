@@ -40,6 +40,12 @@ type Message struct {
 	Message  string `json:"message"`
 }
 
+type PrintFunc func(string, ...interface{})
+
+func PrintNoOp(fmt string, v ...interface{}) {}
+
+const verboseDebugging = false // XXX config
+
 //
 // websocket handler
 //
@@ -96,8 +102,7 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 
 		select {
 		case updateNotification = <-updateChan:
-			fmt.Println("== got an update notification")
-			fmt.Println(updateNotification)
+			app.info.Printf("Got update notification:%s\n", updateNotification)
 			err := ws.WriteJSON(Message{
 				Username: "Server",
 				Message:  updateNotification,
@@ -108,8 +113,7 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 			}
 
 		case clientMessage = <-clientMsgChan:
-			fmt.Println("=== got a client message")
-			fmt.Println(clientMessage)
+			app.info.Printf("Got client message: %s\n", clientMessage)
 			if clientMessage.Message == "refresh" {
 				// writing a string containing a username to the
 				// update channel triggers an update if it's
@@ -118,7 +122,7 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 				// XXX if the update isn't going to happen
 				app.updateChan <- currentUsername
 			} else {
-				fmt.Printf("ignoring unknown client message:%s\n", clientMessage.Message)
+				app.info.Printf("ignoring unknown client message:%s\n", clientMessage.Message)
 			}
 		case clientError = <-clientErrChan:
 			app.info.Printf("removing client %s err=%v\n", wc, clientError)
@@ -157,17 +161,13 @@ func readFromWebSocket(ws *websocket.Conn) (chan Message, chan error) {
 				msgChan <- msg
 			}
 		}
-		fmt.Println("readFromWebsocket goroutine exiting")
+		//fmt.Println("readFromWebsocket goroutine exiting")
 		close(msgChan)
 		close(errChan)
 	}()
 
 	return msgChan, errChan
 }
-
-type PrintFunc func(string, ...interface{})
-
-func PrintNoOp(fmt string, v ...interface{}) {}
 
 // PeriodicUpdate is intended to be called in a long-running goroutine that
 // will occasionally call update to fetch new data from lastfm
@@ -180,8 +180,10 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 	inactiveDuration := time.Duration(updateFreq) * time.Minute
 	activeDuration := time.Duration(10) * time.Minute // XXX this should be configurable too
 
-	//var debug PrintFunc = PrintNoOp
-	var debug PrintFunc = app.info.Printf
+	var debug PrintFunc = PrintNoOp
+	if verboseDebugging {
+		debug = app.info.Printf
+	}
 
 	// goroutine that ticks every minute. do this instead of time.sleep
 	// so that a connected user can trigger a wakeup
@@ -242,16 +244,21 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 			continue // next loop iteration
 		}
 
-		// XXX for now don't actually run updates
-		// app.doUpdate(baseLogDir, credentials) // don't do anyting special on error
-		fmt.Println("XXX simulating update for grgbrn")
-		updateResult := fmt.Sprintf("[ update at %s ]", time.Now().String())
+		res, err := app.doUpdate(baseLogDir, credentials)
+		if err != nil {
+			// if the update fails we have nothing to send
+			// not sure if an error notification to the client
+			// would be useful here
+		}
+		if res.NewItems > 0 {
+			updateResult := fmt.Sprintf("%d new items available", res.NewItems)
 
-		// write the update to any registered channels
-		// MULTIUSER filter this by users
-		for client, updateChan := range app.registeredClients {
-			fmt.Printf("sending update to registered client:%s\n", client)
-			updateChan <- updateResult
+			// write the update to any registered channels
+			// MULTIUSER filter this by users
+			for client, updateChan := range app.registeredClients {
+				fmt.Printf("sending update to registered client:%s\n", client)
+				updateChan <- updateResult
+			}
 		}
 
 		lastRunTimes[userToUpdate] = time.Now()
@@ -259,7 +266,7 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 	}
 }
 
-func (app *Application) doUpdate(baseLogDir string, credentials update.LastFMCredentials) error {
+func (app *Application) doUpdate(baseLogDir string, credentials update.LastFMCredentials) (*update.FetchResults, error) {
 
 	// create a datestamped logfile in our logdir for this update
 	// 2019/11/03 16:05:44  ->  20191103_160544
@@ -270,7 +277,7 @@ func (app *Application) doUpdate(baseLogDir string, credentials update.LastFMCre
 
 	f, err := os.Create(logPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer f.Close()
 
@@ -288,13 +295,13 @@ func (app *Application) doUpdate(baseLogDir string, credentials update.LastFMCre
 	if err != nil {
 		app.info.Println("Update failed")
 		app.info.Println(err)
-		return err
+		return nil, err
 	}
 	app.info.Println("Update succeeded")
 	app.info.Printf("%+v\n", res)
 
 	// this will need to be able to return some kind of meaningful client info!
-	return nil
+	return &res, nil
 }
 
 func (app *Application) registerForUpdates(client WebsocketClient) (chan string, error) {

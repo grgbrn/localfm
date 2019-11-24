@@ -81,15 +81,18 @@ class Page {
 
     // call each registered datasource function and pass
     // the results to each widget that depends on it
+    // returns a promise that resolves when the refresh is finished
     refreshData() {
         let state = this.getState()
         this.log("refreshing data with state: " + JSON.stringify(state))
+
+        let datasourcePromises = []
 
         for (let [fn, widgets] of this.deps) {
             this.log("calling datasource: " + fn.name)
 
             let p = fn(state)
-            p.then(data => {
+            .then(data => {
                 this.log(`${fn.name} got data:`)
                 this.log(data)
                 for (let w of widgets) {
@@ -115,7 +118,9 @@ class Page {
                     }
                 }
             })
+            datasourcePromises.push(p)
         }
+        return Promise.all(datasourcePromises)
     }
 
     getState() {
@@ -668,38 +673,42 @@ function initRecentPage() {
 
     // do the initial data refresh, which will cause the
     // widgets to be updated with newly fetched data
-    page.refreshData()
+    page.refreshData().then(_ => {
+        // start websocket connection
+        console.log("starting websocket connection...")
+        let ws = new WebSocket('ws://' + window.location.host + '/ws');
 
-    // start websocket connection
-    console.log("starting websocket connection...")
-    let ws = new WebSocket('ws://' + window.location.host + '/ws');
+        ws.addEventListener('open', e => {
+            console.log("websocket connection opened")
+        })
+        ws.addEventListener('close', e => {
+            // XXX flesh out close behavior
+            // XXX should wait a bit and try to reconnect
+            console.log("websocket connection closed")
+        })
+        ws.addEventListener('message', function(e) {
+            console.log("got a message from the server:")
+            var msg = JSON.parse(e.data)
+            console.log(msg)
+            console.log("refreshing recent tracks")
+            page.refreshData()
+        })
+        ws.addEventListener('error', e => {
+            // XXX flesh out error behavior
+            console.log("websocket error!")
+        })
 
-    ws.addEventListener('open', e => {
-        console.log("websocket connection opened")
-    })
-    ws.addEventListener('close', e => {
-        // XXX flesh out close behavior
-        // XXX should wait a bit and try to reconnect
-        console.log("websocket connection closed")
-    })
-    ws.addEventListener('message', function(e) {
-        console.log("got a message from the server:")
-        var msg = JSON.parse(e.data)
-        console.log(msg)
-    })
-    ws.addEventListener('error', e => {
-        // XXX flesh out error behavior
-        console.log("websocket error!")
+        // XXX this should really be attached to a button
+        // XXX also need a a whoami call to get logged-in identity
+        window.refreshTracks = function() {
+            ws.send(JSON.stringify({
+                        username: "grgbrn",
+                        message: "refresh"
+                    }
+            ));
+        }
     })
 
-    // XXX this should really be attached to a button
-    window.refreshTracks = function(message) {
-        ws.send(JSON.stringify({
-                    username: "grgbrn", // XXX how does javascript know this?
-                    message: message
-                }
-        ));
-    }
 }
 
 /// xxx junk drawer
