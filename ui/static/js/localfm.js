@@ -338,6 +338,7 @@ class RecentTrackList {
     constructor(page) {
         this.page = page
         this.tableDom = document.querySelector("table.listview")
+        this.interval = null;
     }
 
     refresh(state, data) {
@@ -347,6 +348,9 @@ class RecentTrackList {
             this.populateTrackList(data.activity)
         } else {
             this.message("No data")
+        }
+        if (!this.interval) {
+            this.interval = setInterval(this.updateTimestamps.bind(this), 1000*60)
         }
     }
 
@@ -374,11 +378,11 @@ class RecentTrackList {
             td[0].children[0].src = randElt(dat.urls);
             td[1].children[0].textContent = dat.title;
             td[1].children[2].textContent = dat.artist;
-            td[2].textContent = this.prettyDate(dat.when);
-
-            // display local timezone-specific text repr in a tooltip
+            // timestamp field is a bit more complicated
             let d = new Date(dat.when)
-            td[2].setAttribute('title', d.toLocaleString());
+            td[2].textContent = this.prettyDate(d);
+            td[2].setAttribute('title', d.toLocaleString()); // tooltip
+            td[2].setAttribute('data-epoch', d.getTime());
 
             this.tableDom.appendChild(clone);
         }
@@ -410,10 +414,8 @@ class RecentTrackList {
     // Takes an ISO time and returns a string representing how
     // long ago the date represents.
     // https://johnresig.com/blog/javascript-pretty-date/
-    prettyDate(time) {
-        // var date = new Date((time || "").replace(/-/g, "/").replace(/[TZ]/g, " ")),
-        var date = new Date(time),
-            diff = (((new Date()).getTime() - date.getTime()) / 1000),
+    prettyDate(date) {
+        var diff = (((new Date()).getTime() - date.getTime()) / 1000),
             day_diff = Math.floor(diff / 86400);
 
         if (isNaN(day_diff) || day_diff < 0 || day_diff >= 31) return;
@@ -433,6 +435,18 @@ class RecentTrackList {
         var td = clone.querySelectorAll("td"); // skip past the tr
         td[0].textContent = label;
         return clone
+    }
+
+    updateTimestamps() {
+        document.querySelectorAll('.timestamp').forEach(elt => {
+            let epochStr = elt.getAttribute('data-epoch')
+            if (epochStr) {
+                let epoch = parseInt(epochStr)
+                if (epoch) {
+                    elt.textContent = this.prettyDate(new Date(epoch))
+                }
+            }
+        })
     }
 
     // display a message in the table instead of data
