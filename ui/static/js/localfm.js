@@ -47,8 +47,10 @@ class Page {
         this.widgets = []
 
         // holds a map of DataSources -> widgets
-        // XXX wouldn't typescript be nice here
         this.deps = new Map()
+
+        // functions to call when data is updated
+        this.dataChangeListeners = []
     }
 
     addWidget(w, dataDeps) {
@@ -157,7 +159,20 @@ class Page {
         window.location.hash = params.toString()
 
         // call all datasources with new state
-        this.refreshData()
+        this.refreshData().then(_ => {
+            if (this.dataChangeListeners.length > 0) {
+                this.log(`triggering ${this.dataChangeListeners.length} dataChangeListeners`)
+                for (let fn of this.dataChangeListeners) {
+                    fn() // XXX anything we can pass to be useful?
+                }
+            }
+        })
+    }
+
+    // register a function to be called whenever this page's state/data
+    // is updated. called after the datasource refresh has finished
+    addDataChangeListener(fn) {
+        this.dataChangeListeners.push(fn)
     }
 }
 
@@ -225,7 +240,6 @@ class DateBar {
         } else {
             document.getElementById("nextlink").style.visibility = "";
         }
-
     }
 
     error() { } // don't do anything
@@ -685,44 +699,108 @@ function initRecentPage() {
     let tracks = new RecentTrackList(page)
     page.addWidget(tracks, [recentTracks])
 
-    // do the initial data refresh, which will cause the
-    // widgets to be updated with newly fetched data
+    // set up a websocket listener that refreshes the
+    // page's data when it gets a message from the server
+    let ws = new WebsocketConnection()
+    ws.addMessageListener(msg => {
+        console.log("got update message from server")
+        page.refreshData()
+    })
+    // XXX only for debugging
+    window.ws = ws
+
+    // XXX this should really be attached to a button
+    // XXX also need a a whoami call to get logged-in identity
+    window.refreshTracks = function() {
+        ws.send({
+            username: "grgbrn",
+            message: "refresh"
+        })
+    }
+
+    // after the initial data refresh, open the websocket
+    // connection to receive live updates (but only if we're showing
+    // the most recent data)
     page.refreshData().then(_ => {
-        // start websocket connection
-        console.log("starting websocket connection...")
-        let ws = new WebSocket('ws://' + window.location.host + '/ws');
-
-        ws.addEventListener('open', e => {
-            console.log("websocket connection opened")
-        })
-        ws.addEventListener('close', e => {
-            // XXX flesh out close behavior
-            // XXX should wait a bit and try to reconnect
-            console.log("websocket connection closed")
-        })
-        ws.addEventListener('message', function(e) {
-            console.log("got a message from the server:")
-            var msg = JSON.parse(e.data)
-            console.log(msg)
-            console.log("refreshing recent tracks")
-            page.refreshData()
-        })
-        ws.addEventListener('error', e => {
-            // XXX flesh out error behavior
-            console.log("websocket error!")
-        })
-
-        // XXX this should really be attached to a button
-        // XXX also need a a whoami call to get logged-in identity
-        window.refreshTracks = function() {
-            ws.send(JSON.stringify({
-                        username: "grgbrn",
-                        message: "refresh"
-                    }
-            ));
+        let state = page.getState()
+        if (state.offset == 0) {
+            console.log("viewing most recent tracks, enabling live updates")
+            ws.connect()
         }
     })
 
+    // enable/disable websocket updates as we move between pages
+    page.addDataChangeListener(_ => {
+        let state = page.getState()
+        if (state.offset == 0) {
+            console.log("viewing most recent tracks, enabling live updates")
+            ws.connect()
+        } else if (ws.connected) {
+            ws.disconnect()
+        }
+    })
+}
+
+// helper class to encapsulate a websocket connection and make
+// it easier to manage connect/disconnect state
+class WebsocketConnection {
+    constructor() {
+        this.ws = null
+        this.connected = false
+        this.listeners = []
+    }
+    // open connection to the server, enabling updates and send()
+    connect() {
+        if (this.ws) {
+            throw new Error("WebsocketConnection already connected")
+        }
+        console.log("starting websocket connection...")
+        let ws = new WebSocket('ws://' + window.location.host + '/ws');
+        this.ws = ws
+
+        ws.addEventListener('open', e => {
+            console.log("websocket connection opened")
+            this.connected = true
+        })
+        ws.addEventListener('close', e => {
+            console.log("websocket connection closed")
+            this.connected = false
+            this.ws = null
+            // XXX auto reconnect?
+        })
+        ws.addEventListener('message', e => {
+            console.log("got a message from the server:")
+            var msg = JSON.parse(e.data)
+            console.log(msg)
+            for (let listener of this.listeners) {
+                listener(msg)
+            }
+        })
+        ws.addEventListener('error', e => {
+            // XXX does this imply that we've been disconnected?
+            // XXX where to display this?
+            console.log("websocket error!")
+        })
+    }
+
+    disconnect() {
+        // XXX set flag to prevent auto-reconnect
+        if (this.ws) {
+            this.ws.close()
+        }
+    }
+
+    send(message) {
+        if (!this.ws) {
+            throw new Error("WebsocketConnection not connected")
+        }
+        this.ws.send(JSON.stringify(message))
+    }
+
+    // get notifications of messages from the server
+    addMessageListener(fn) {
+        this.listeners.push(fn)
+    }
 }
 
 /// xxx junk drawer
