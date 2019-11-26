@@ -5,14 +5,12 @@ import (
 	"net/http"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
 	"bitbucket.org/grgbrn/localfm/pkg/util"
 
 	"github.com/golangcollege/sessions"
-	"github.com/gorilla/websocket"
 	"github.com/justinas/alice"
 )
 
@@ -29,15 +27,8 @@ type Application struct {
 	updateChan chan string
 
 	// synchronized access to map of websocket clients
-	websocketClients struct {
-		sync.RWMutex
-		m map[*websocket.Conn]WebsocketClient
-	}
-
-	// websocket clients registered to receive updates
-	// on a channel
-	// XXX revisit sync on this map
-	registeredClients map[WebsocketClient]chan string
+	// and their update channels
+	websocketClients *WebsocketRegistry
 }
 
 func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Application, error) {
@@ -46,15 +37,11 @@ func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Ap
 	session.Lifetime = 24 * 7 * time.Hour // XXX config var
 
 	app := &Application{
-		db:      db,
-		info:    info,
-		err:     err,
-		session: session,
-		websocketClients: struct {
-			sync.RWMutex
-			m map[*websocket.Conn]WebsocketClient
-		}{m: make(map[*websocket.Conn]WebsocketClient)},
-		registeredClients: make(map[WebsocketClient]chan string),
+		db:               db,
+		info:             info,
+		err:              err,
+		session:          session,
+		websocketClients: MakeWebsocketRegistry(),
 	}
 
 	//

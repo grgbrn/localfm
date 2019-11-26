@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sync"
 	"time"
 
 	"bitbucket.org/grgbrn/localfm/pkg/update"
@@ -25,6 +26,8 @@ type WebsocketClient struct {
 	Username     string
 	ConnectedAt  time.Time
 	LastActivity time.Time
+
+	conn *websocket.Conn // not sure this is needed
 }
 
 func (c WebsocketClient) String() string {
@@ -34,6 +37,64 @@ func (c WebsocketClient) String() string {
 type WebsocketMessage struct {
 	Username string `json:"username"`
 	Message  string `json:"message"`
+}
+
+// WebsocketRegistry provides synchronized access to all
+// connected clients and tracks their update channels
+type WebsocketRegistry struct {
+	sync.RWMutex
+	m map[WebsocketClient]chan string
+}
+
+// Register adds a new client and it's update channel to the registry
+func (reg *WebsocketRegistry) Register(client WebsocketClient, updateChan chan string) int {
+	reg.Lock()
+	reg.m[client] = updateChan
+	count := len(reg.m)
+	reg.Unlock()
+	return count
+}
+
+// Deregister removes a client and closes it's update channel
+func (reg *WebsocketRegistry) Deregister(client WebsocketClient) int {
+	reg.Lock()
+	ch, exists := reg.m[client]
+	if exists {
+		close(ch)
+		delete(reg.m, client)
+	}
+	count := len(reg.m)
+	reg.Unlock()
+	return count
+}
+
+// ChannelsForUsername returns all update channels that are listening
+// for updates for a given username
+func (reg *WebsocketRegistry) ChannelsForUsername(username string) []chan string {
+	channels := make([]chan string, 0)
+	reg.RLock()
+	for client, updateChan := range reg.m {
+		if client.Username == username {
+			channels = append(channels, updateChan)
+		}
+	}
+	reg.RUnlock()
+	return channels
+}
+
+// Count gives the number of currently connected clients
+func (reg *WebsocketRegistry) Count() int {
+	reg.RLock()
+	count := len(reg.m)
+	reg.RUnlock()
+	return count
+}
+
+// MakeWebsocketRegistry creates a new WebsocketRegistry
+func MakeWebsocketRegistry() *WebsocketRegistry {
+	return &WebsocketRegistry{
+		m: make(map[WebsocketClient]chan string),
+	}
 }
 
 // websocketConnection is the http.Handler that is run for long-running
@@ -62,21 +123,16 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 		UserAgent:     r.UserAgent(),
 		ConnectedAt:   time.Now(),
 		LastActivity:  time.Now(),
+		conn:          ws,
 	}
 	app.info.Printf("new client:%+v\n", wc)
 
-	// XXX wrap this up
-	app.websocketClients.Lock()
-	app.websocketClients.m[ws] = wc
-	app.websocketClients.Unlock()
-	app.info.Printf("total clients:%d\n", len(app.websocketClients.m))
+	// make a channel the client can use to listen
+	// for updates
+	updateChan := make(chan string)
 
-	// get a channel we can use to listen for updates
-	updateChan, err := app.registerForUpdates(wc)
-	if err != nil {
-		panic("can't register client, not sure how to handle this")
-	}
-	defer app.deregisterForUpdates(wc)
+	c := app.websocketClients.Register(wc, updateChan)
+	app.info.Printf("total clients:%d\n", c)
 
 	// Listen for both messages from the client and events on
 	// the update channel. This requires doing a select on
@@ -98,8 +154,10 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 				Message:  updateNotification,
 			})
 			if err != nil {
-				// XXX should probably close and cleanup?
-				fmt.Println("!!! error writing message to client")
+				app.info.Printf("removing client %s err=%v\n", wc, err)
+				// cleanup and remove client
+				app.websocketClients.Deregister(wc)
+				clientActive = false
 			}
 
 		case clientMessage = <-clientMsgChan:
@@ -116,16 +174,10 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 			}
 		case clientError = <-clientErrChan:
 			app.info.Printf("removing client %s err=%v\n", wc, clientError)
-
-			// XXX wrap this up
-			app.websocketClients.Lock()
-			delete(app.websocketClients.m, ws)
-			app.websocketClients.Unlock()
-
+			app.websocketClients.Deregister(wc)
 			clientActive = false
 		}
-		// XXX not sure if this is safe or not
-		wc.LastActivity = time.Now() // XXX race condition?
+		wc.LastActivity = time.Now()
 	}
 }
 
@@ -246,7 +298,7 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 		// see if it's time to run an update again, based on whether
 		// the user is active (only one user for now, so simple)
 		currentUpdateDuration := inactiveDuration
-		if len(app.registeredClients) > 0 {
+		if app.websocketClients.Count() > 0 {
 			currentUpdateDuration = activeDuration
 		}
 		debug("current update frequency:%v\n", currentUpdateDuration)
@@ -265,10 +317,10 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 			updateResult := fmt.Sprintf("%d new items available", res.NewItems)
 
 			// write the update to any registered channels
-			// MULTIUSER filter this by users
-			for client, updateChan := range app.registeredClients {
-				fmt.Printf("sending update to registered client:%s\n", client)
-				updateChan <- updateResult
+			userChannels := app.websocketClients.ChannelsForUsername(userToUpdate)
+			fmt.Printf("sending update to %d registered clients\n", len(userChannels))
+			for _, ch := range userChannels {
+				ch <- updateResult
 			}
 		}
 
@@ -314,26 +366,6 @@ func (app *Application) doUpdate(baseLogDir string, credentials update.LastFMCre
 	app.info.Printf("%+v\n", res)
 
 	return &res, nil
-}
-
-// registerForUpdates creates a new channel for a connected websocket client
-// to receive notification of updates
-func (app *Application) registerForUpdates(client WebsocketClient) (chan string, error) {
-	// fmt.Printf(">> registering client:%s\n", client)
-	ch := make(chan string)
-	app.registeredClients[client] = ch
-	// fmt.Printf(">> %d active clients\n", len(app.registeredClients))
-	return ch, nil
-}
-
-// deregisterForUpdates removes a websocket client's update channel
-func (app *Application) deregisterForUpdates(client WebsocketClient) error {
-	// fmt.Printf(">> deregistering client:%s\n", client)
-	ch := app.registeredClients[client]
-	delete(app.registeredClients, client)
-	close(ch)
-	// fmt.Printf(">> %d clients remaining\n", len(app.registeredClients))
-	return nil
 }
 
 //
