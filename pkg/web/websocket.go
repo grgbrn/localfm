@@ -16,10 +16,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// hard throttle limit on how often we'll trigger an update
-// (note that this is unrelated to api call throttle!)
-const maxUpdateFrequencyMinutes float64 = 2
-
+// WebsocketClient represents a connected browser listening
+// for updates
 type WebsocketClient struct {
 	RemoteAddress net.Addr
 	UserAgent     string
@@ -33,22 +31,16 @@ func (c WebsocketClient) String() string {
 	return fmt.Sprintf("%s@%s", c.Username, c.RemoteAddress)
 }
 
-// XXX sample message
-// XXX add timestamp? localtime? timezone?
-type Message struct {
+type WebsocketMessage struct {
 	Username string `json:"username"`
 	Message  string `json:"message"`
 }
 
-type PrintFunc func(string, ...interface{})
-
-func PrintNoOp(fmt string, v ...interface{}) {}
-
-const verboseDebugging = false // XXX config
-
-//
-// websocket handler
-//
+// websocketConnection is the http.Handler that is run for long-running
+// websocket connections. It registers the client and adds it's update channel
+// to the list of active clients, in order for it to receive notification of
+// new items. This handler and it's goroutine run for as long as the
+// websocket remains open
 func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Request) {
 
 	// upgrade the GET to a websocket
@@ -79,31 +71,29 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 	app.websocketClients.Unlock()
 	app.info.Printf("total clients:%d\n", len(app.websocketClients.m))
 
-	// this goroutine is responsible for registering/unregistering
-	// it's interest in updates for a specific user
-	// it's this call that increases the freqency of polling for that user (TODO)
+	// get a channel we can use to listen for updates
 	updateChan, err := app.registerForUpdates(wc)
 	if err != nil {
 		panic("can't register client, not sure how to handle this")
 	}
 	defer app.deregisterForUpdates(wc)
 
-	// when it gets updates for that user, it needs to send them to the browser
-	// it can also get requests from the browser to do an immediate update
-	// only way to do this in go is select on channels, so the blocking reads
-	// of the websocket API need to turn into channel operations
+	// Listen for both messages from the client and events on
+	// the update channel. This requires doing a select on
+	// multiple channels, so the websocket must be wrapped
+	// in a channel
 	clientMsgChan, clientErrChan := readFromWebSocket(ws)
 
 	clientActive := true
 	for clientActive {
 		var updateNotification string
-		var clientMessage Message
+		var clientMessage WebsocketMessage
 		var clientError error
 
 		select {
 		case updateNotification = <-updateChan:
 			app.info.Printf("Got update notification:%s\n", updateNotification)
-			err := ws.WriteJSON(Message{
+			err := ws.WriteJSON(WebsocketMessage{
 				Username: "Server",
 				Message:  updateNotification,
 			})
@@ -114,12 +104,12 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 
 		case clientMessage = <-clientMsgChan:
 			app.info.Printf("Got client message: %s\n", clientMessage)
+			// only one valid client message at the moment
 			if clientMessage.Message == "refresh" {
-				// writing a string containing a username to the
-				// update channel triggers an update if it's
-				// below the minimum update threshold
-				// XXX would be nice to return an error to the client
-				// XXX if the update isn't going to happen
+				// this update request may not be triggered if
+				// it's below the minimum update threshold
+				// would be nice to return a notice to the client
+				// if the update is rejected
 				app.updateChan <- currentUsername
 			} else {
 				app.info.Printf("ignoring unknown client message:%s\n", clientMessage.Message)
@@ -137,23 +127,27 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 		// XXX not sure if this is safe or not
 		wc.LastActivity = time.Now() // XXX race condition?
 	}
-	// XXX what kind of cleanup needs to happen here?
 }
 
-// read messages from the websocket and convert them to a channel
-// (so they can be used with select)
-// creates a new goroutine in the background which exits when the
-// websocket connection is closed
-func readFromWebSocket(ws *websocket.Conn) (chan Message, chan error) {
-	msgChan := make(chan Message)
+// readFromWebSocket reads messages from the websocket connection
+// and converts them to messages on a channel. Any messages received
+// over the websocket connection are parsed and sent over the
+// WebsocketMessage channel, the error channel is used to signal that
+// the websocket connection is closing down.
+// This function creates a goroutine which exits when the websocket
+// connection is closed
+func readFromWebSocket(ws *websocket.Conn) (chan WebsocketMessage, chan error) {
+	msgChan := make(chan WebsocketMessage)
 	errChan := make(chan error)
 
 	go func() {
 		done := false
 		for !done {
-			var msg Message
+			var msg WebsocketMessage
 			// read in a new message as json and map it to a Message
 			err := ws.ReadJSON(&msg)
+			// XXX does this mean a parse error can close the connection?
+			// XXX how to distinguish the two?
 			if err != nil {
 				errChan <- err
 				done = true
@@ -161,7 +155,6 @@ func readFromWebSocket(ws *websocket.Conn) (chan Message, chan error) {
 				msgChan <- msg
 			}
 		}
-		//fmt.Println("readFromWebsocket goroutine exiting")
 		close(msgChan)
 		close(errChan)
 	}()
@@ -169,8 +162,26 @@ func readFromWebSocket(ws *websocket.Conn) (chan Message, chan error) {
 	return msgChan, errChan
 }
 
-// PeriodicUpdate is intended to be called in a long-running goroutine that
-// will occasionally call update to fetch new data from lastfm
+// hard throttle limit on how often we'll trigger an update
+// (note that this is unrelated to api call throttle!)
+const maxUpdateFrequencyMinutes float64 = 2
+
+type PrintFunc func(string, ...interface{})
+
+func PrintNoOp(fmt string, v ...interface{}) {}
+
+const verboseDebugging = false // XXX config
+
+// PeriodicUpdate runs in a long-running goroutine and triggers calls
+// against the lastfm api to find updated tracks. The frequency of thse
+// updates depends on whether a user is connected and actively receiving
+// notifications of new items.
+//
+// app.updateChan regulates these updates. It is triggered at a fixed
+// time interval to check if the user is due for an update.
+// A connected client may also post to updateChan to request an immediate
+// update, which will be rejected only if the most recent update
+// was less than maxUpdateFrequencyMinutes ago.
 func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, credentials update.LastFMCredentials) error {
 	if app.updateChan != nil {
 		return errors.New("PeriodicUpdate can only be started once")
@@ -185,8 +196,8 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 		debug = app.info.Printf
 	}
 
-	// goroutine that ticks every minute. do this instead of time.sleep
-	// so that a connected user can trigger a wakeup
+	// tick every minute. do this instead of time.sleep() so a connected
+	// user can trigger a wakeup
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
 		for {
@@ -206,13 +217,14 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 	app.info.Printf("Loaded %d last run times", len(lastRunTimes))
 
 	for {
-		// wait for someone to post to the update channel
+		// block on the update channel
 		updateRequest := <-app.updateChan
 
 		// if it's a user-generated request, update that user
 		// otherwise find the user who hasn't been updated in the
 		// longest time and see if they're due
 		// (active users should get priority though)
+		// XXX this doesn't matter until there are actually multiple users
 		userRequestedUpdate := len(updateRequest) > 0
 		userToUpdate := "grgbrn" // MULTIUSER
 
@@ -246,9 +258,8 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 
 		res, err := app.doUpdate(baseLogDir, credentials)
 		if err != nil {
-			// if the update fails we have nothing to send
-			// not sure if an error notification to the client
-			// would be useful here
+			// Update has failed, so nothing to send.
+			// XXX would an error notification to the client be useful?
 		}
 		if res.NewItems > 0 {
 			updateResult := fmt.Sprintf("%d new items available", res.NewItems)
@@ -266,6 +277,8 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 	}
 }
 
+// doUpdate triggers an update and returns a FetchResults, which summarizes the
+// number of new items found.
 func (app *Application) doUpdate(baseLogDir string, credentials update.LastFMCredentials) (*update.FetchResults, error) {
 
 	// create a datestamped logfile in our logdir for this update
@@ -300,14 +313,12 @@ func (app *Application) doUpdate(baseLogDir string, credentials update.LastFMCre
 	app.info.Println("Update succeeded")
 	app.info.Printf("%+v\n", res)
 
-	// this will need to be able to return some kind of meaningful client info!
 	return &res, nil
 }
 
+// registerForUpdates creates a new channel for a connected websocket client
+// to receive notification of updates
 func (app *Application) registerForUpdates(client WebsocketClient) (chan string, error) {
-	// this fn needs to increase the fetch frequency for the client
-	// and create a new channel that will get a message when there
-	// are updates for that user
 	// fmt.Printf(">> registering client:%s\n", client)
 	ch := make(chan string)
 	app.registeredClients[client] = ch
@@ -315,9 +326,8 @@ func (app *Application) registerForUpdates(client WebsocketClient) (chan string,
 	return ch, nil
 }
 
+// deregisterForUpdates removes a websocket client's update channel
 func (app *Application) deregisterForUpdates(client WebsocketClient) error {
-	// this fn needs to reduce the fetch frequency for the client
-	// and clean up / deregister the channel
 	// fmt.Printf(">> deregistering client:%s\n", client)
 	ch := app.registeredClients[client]
 	delete(app.registeredClients, client)
@@ -329,6 +339,8 @@ func (app *Application) deregisterForUpdates(client WebsocketClient) error {
 //
 // temporary until user db comes along
 //
+
+// name of the filename to store last run times
 const lastRunFilename = "lastrun.json"
 
 func loadLastRunTimes() (map[string]time.Time, error) {
