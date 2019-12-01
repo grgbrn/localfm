@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	"bitbucket.org/grgbrn/localfm/pkg/util"
+	"github.com/gorilla/sessions"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -123,6 +124,20 @@ func authenticateUser(email, passwd string) (int, error) {
 	return userID, nil
 }
 
+func (app *Application) getSession(r *http.Request) (*sessions.Session, error) {
+	session, err := app.sessionStore.Get(r, "session-name") // XXX not sure why i need this?
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
 func (app *Application) isAuthenticated(r *http.Request) bool {
-	return app.session.Exists(r, "authenticatedUserID")
+	session, err := app.getSession(r)
+	if err != nil {
+		// XXX log this or something
+		return false
+	}
+	_, present := session.Values["authenticatedUserID"]
+	return present
 }

@@ -104,6 +104,15 @@ func MakeWebsocketRegistry() *WebsocketRegistry {
 // websocket remains open
 func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Request) {
 
+	// regular session still exists before upgrading the websocket
+	var currentUsername string
+	if app.isAuthenticated(r) {
+		currentUsername = "grgbrn"
+	} else {
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
+	}
+
 	// upgrade the GET to a websocket
 	upgrader := websocket.Upgrader{}
 	ws, err := upgrader.Upgrade(w, r, nil)
@@ -112,9 +121,6 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	defer ws.Close()
-
-	// XXX need to figure this out somehow
-	currentUsername := "grgbrn"
 
 	// register the new client
 	wc := WebsocketClient{

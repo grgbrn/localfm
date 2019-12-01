@@ -14,6 +14,13 @@ import (
 // login pages
 //
 func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
+
+	session, err := app.getSession(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	if r.Method == "GET" {
 		renderTemplate(w, "login", &templateData{})
 	} else if r.Method == "POST" {
@@ -41,7 +48,12 @@ func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		app.session.Put(r, "authenticatedUserID", userID)
+		session.Values["authenticatedUserID"] = userID
+		err = session.Save(r, w)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
 		// redirect to splash page
 		// XXX but we should remember what the user was trying
@@ -59,7 +71,20 @@ func (app *Application) logoutUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusBadRequest)
 		return
 	}
-	app.session.Remove(r, "authenticatedUserID")
+
+	session, err := app.getSession(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	delete(session.Values, "authenticatedUserID")
+	err = session.Save(r, w)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 

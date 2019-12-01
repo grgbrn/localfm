@@ -1,7 +1,7 @@
 module bitbucket.org/grgbrn/localfm
 
 require (
-	github.com/golangcollege/sessions v1.1.0
+	github.com/gorilla/sessions v1.2.0
 	github.com/gorilla/websocket v1.4.1
 	github.com/justinas/alice v0.0.0-20171023064455-03f45bd4b7da
 	github.com/mattn/go-sqlite3 v1.10.0

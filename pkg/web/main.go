@@ -5,21 +5,20 @@ import (
 	"net/http"
 	"path"
 	"strings"
-	"time"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
 	"bitbucket.org/grgbrn/localfm/pkg/util"
 
-	"github.com/golangcollege/sessions"
+	"github.com/gorilla/sessions"
 	"github.com/justinas/alice"
 )
 
 type Application struct {
-	db      *m.Database
-	err     *log.Logger
-	info    *log.Logger
-	session *sessions.Session
-	Mux     http.Handler
+	db           *m.Database
+	err          *log.Logger
+	info         *log.Logger
+	sessionStore *sessions.CookieStore
+	Mux          http.Handler
 
 	// updateChan regulates background updates. empty strings
 	// written to it indicate timed checks, strings containing
@@ -33,14 +32,18 @@ type Application struct {
 
 func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Application, error) {
 
-	session := sessions.New([]byte(sessionSecret))
-	session.Lifetime = 24 * 7 * time.Hour // XXX config var
+	session := sessions.NewCookieStore([]byte(sessionSecret))
+	session.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 7, // XXX config var
+		HttpOnly: true,
+	}
 
 	app := &Application{
 		db:               db,
 		info:             info,
 		err:              err,
-		session:          session,
+		sessionStore:     session,
 		websocketClients: MakeWebsocketRegistry(),
 	}
 
@@ -48,9 +51,8 @@ func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Ap
 	// create middleware chains to wrap handlers
 	//
 	standardMiddleware := alice.New(app.logRequest, secureHeaders)
-	dynamicMiddleware := standardMiddleware.Append(app.session.Enable)
-	protectedMiddleware := dynamicMiddleware.Append(app.requireAuthentication)
-	dataMiddleware := dynamicMiddleware.Append(app.requireAPIAuth)
+	protectedMiddleware := standardMiddleware.Append(app.requireAuthentication)
+	dataMiddleware := standardMiddleware.Append(app.requireAPIAuth)
 
 	//
 	// create a new ServeMux and register handlers
@@ -58,8 +60,8 @@ func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Ap
 	mux := http.NewServeMux()
 
 	// login/logout
-	mux.Handle("/login", dynamicMiddleware.ThenFunc(app.loginUser))
-	mux.Handle("/logout", dynamicMiddleware.ThenFunc(app.logoutUser))
+	mux.Handle("/login", standardMiddleware.ThenFunc(app.loginUser))
+	mux.Handle("/logout", standardMiddleware.ThenFunc(app.logoutUser))
 
 	// app pages
 	mux.Handle("/", protectedMiddleware.ThenFunc(index))
@@ -75,12 +77,6 @@ func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Ap
 	mux.Handle("/data/recentTracks", dataMiddleware.ThenFunc(app.recentTracksData))
 
 	// websocket
-	// XXX dataMiddleware interferes with gorilla/websocket
-	// XXX (websocket: response does not implement http.Hijacker)
-	// XXX this means no authentication on websocket handler?
-	// XXX should probably manually implement app.session.Enable
-	// XXX and app.requireAPIAuth
-	//mux.Handle("/ws", dataMiddleware.ThenFunc(app.websocketConnection))
 	mux.HandleFunc("/ws", app.websocketConnection)
 
 	// set up static file server to ignore /ui/static/ prefix
