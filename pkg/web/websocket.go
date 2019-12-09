@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -58,7 +59,9 @@ func (reg *WebsocketRegistry) Register(client WebsocketClient, updateChan chan s
 // Deregister removes a client and closes it's update channel
 func (reg *WebsocketRegistry) Deregister(client WebsocketClient) int {
 	reg.Lock()
+	fmt.Printf(">>> trying to remove client %s\n", client)
 	ch, exists := reg.m[client]
+	fmt.Printf(">>> client exists=%t\n", exists)
 	if exists {
 		close(ch)
 		delete(reg.m, client)
@@ -88,6 +91,19 @@ func (reg *WebsocketRegistry) Count() int {
 	count := len(reg.m)
 	reg.RUnlock()
 	return count
+}
+
+func (reg *WebsocketRegistry) String() string {
+	var buf strings.Builder
+	buf.WriteString("[ ")
+	reg.RLock()
+	for client := range reg.m {
+		buf.WriteString(client.String())
+		buf.WriteString(" ")
+	}
+	reg.RUnlock()
+	buf.WriteString("]")
+	return buf.String()
 }
 
 // MakeWebsocketRegistry creates a new WebsocketRegistry
@@ -137,8 +153,8 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 	// for updates
 	updateChan := make(chan string)
 
-	c := app.websocketClients.Register(wc, updateChan)
-	app.info.Printf("total clients:%d\n", c)
+	app.websocketClients.Register(wc, updateChan)
+	app.info.Printf(app.websocketClients.String())
 
 	// Listen for both messages from the client and events on
 	// the update channel. This requires doing a select on
@@ -160,10 +176,11 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 				Message:  updateNotification,
 			})
 			if err != nil {
-				app.info.Printf("removing client %s err=%v\n", wc, err)
+				app.info.Printf("removing client %s err=%v [1]\n", wc, err)
 				// cleanup and remove client
 				app.websocketClients.Deregister(wc)
 				clientActive = false
+				app.info.Printf(app.websocketClients.String())
 			}
 
 		case clientMessage = <-clientMsgChan:
@@ -179,9 +196,10 @@ func (app *Application) websocketConnection(w http.ResponseWriter, r *http.Reque
 				app.info.Printf("ignoring unknown client message:%s\n", clientMessage.Message)
 			}
 		case clientError = <-clientErrChan:
-			app.info.Printf("removing client %s err=%v\n", wc, clientError)
+			app.info.Printf("removing client %s err=%v [2]\n", wc, clientError)
 			app.websocketClients.Deregister(wc)
 			clientActive = false
+			app.info.Printf(app.websocketClients.String())
 		}
 		wc.LastActivity = time.Now()
 	}
@@ -228,7 +246,7 @@ type PrintFunc func(string, ...interface{})
 
 func PrintNoOp(fmt string, v ...interface{}) {}
 
-const verboseDebugging = false // XXX config
+const verboseDebugging = true // XXX config
 
 // PeriodicUpdate runs in a long-running goroutine and triggers calls
 // against the lastfm api to find updated tracks. The frequency of thse
@@ -324,8 +342,9 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 
 			// write the update to any registered channels
 			userChannels := app.websocketClients.ChannelsForUsername(userToUpdate)
-			fmt.Printf("sending update to %d registered clients\n", len(userChannels))
+			app.info.Printf("sending update to %d registered clients\n", len(userChannels))
 			for _, ch := range userChannels {
+				// XXX might be nice to be able to log which client you're writing to
 				ch <- updateResult
 			}
 		}
