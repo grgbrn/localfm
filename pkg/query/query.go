@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/jmoiron/sqlx"
 )
 
 // DateRangeParams represents query params over a date range
@@ -62,15 +64,16 @@ type ClockResult struct {
 
 // RecentTracks finds the most recently played tracks, with a simple page
 // offset and count
-func RecentTracks(db *sql.DB, trackOffset, count int) ([]ActivityResult, error) {
+func RecentTracks(db *sqlx.DB, trackOffset, count int) ([]ActivityResult, error) {
 	var tracks []ActivityResult
 
-	query := `select a.artist, a.title, a.album, a.dt, i.url
+	query := db.Rebind(`select a.artist, a.title, a.album, a.dt, i.url
 	from activity a
 	left join image i on a.image_id = i.id
-	order by a.dt desc limit ? offset ?;`
+	order by a.dt desc limit ? offset ?;`)
 
 	offset := trackOffset * count
+
 	rows, err := db.Query(query, count, offset)
 	if err != nil {
 		return tracks, err
@@ -102,15 +105,15 @@ func RecentTracks(db *sql.DB, trackOffset, count int) ([]ActivityResult, error) 
 
 // TopTracks finds the most popular tracks by play count over
 // a bounded time period
-func TopTracks(db *sql.DB, params DateRangeParams) ([]TrackResult, error) {
+func TopTracks(db *sqlx.DB, params DateRangeParams) ([]TrackResult, error) {
 	var tracks []TrackResult
 
-	query := `select a.artist, a.title, count(*) as plays, group_concat(distinct i.url)
+	query := db.Rebind(`select a.artist, a.title, count(*) as plays, group_concat(distinct i.url)
 	from activity a
 	left join image i on a.image_id = i.id
 	where a.dt >= ? and a.dt < ?
 	group by a.artist, a.title
-	order by plays desc limit ?;`
+	order by plays desc limit ?;`)
 
 	rows, err := db.Query(query, params.Start, params.End, params.Limit)
 	if err != nil {
@@ -144,16 +147,16 @@ func TopTracks(db *sql.DB, params DateRangeParams) ([]TrackResult, error) {
 
 // TopArtists finds the most popular artists by play count over
 // a bounded time period
-func TopArtists(db *sql.DB, params DateRangeParams) ([]ArtistResult, error) {
+func TopArtists(db *sqlx.DB, params DateRangeParams) ([]ArtistResult, error) {
 
 	var artists []ArtistResult
 
-	query := `select a.artist, count(*) as plays, group_concat(distinct i.url)
+	query := db.Rebind(`select a.artist, count(*) as plays, group_concat(distinct i.url)
 	from activity a
 	left join image i on a.image_id = i.id
 	where a.dt >= ? and a.dt < ?
 	group by a.artist
-	order by plays desc limit ?;`
+	order by plays desc limit ?;`)
 
 	rows, err := db.Query(query, params.Start, params.End, params.Limit)
 	if err != nil {
@@ -185,11 +188,11 @@ func TopArtists(db *sql.DB, params DateRangeParams) ([]ArtistResult, error) {
 // TopNewArtists finds the most popular new artists by play count over
 // a bounded time period. "new" means the artist was first played during
 // this time period
-func TopNewArtists(db *sql.DB, params DateRangeParams) ([]ArtistResult, error) {
+func TopNewArtists(db *sqlx.DB, params DateRangeParams) ([]ArtistResult, error) {
 
 	var artists []ArtistResult
 
-	query := `select a.artist, a.plays, min(a2.dt) initial,
+	query := db.Rebind(`select a.artist, a.plays, min(a2.dt) initial,
 	a.images
 	from
 	(
@@ -206,7 +209,7 @@ func TopNewArtists(db *sql.DB, params DateRangeParams) ([]ArtistResult, error) {
 	join activity a2 on
 	a.artist_id = a2.artist_id
 	group by a.artist_id
-	having initial >= ? and initial < ?;`
+	having initial >= ? and initial < ?;`)
 	queryParams := []interface{}{
 		params.Start,
 		params.End,
@@ -243,15 +246,15 @@ func TopNewArtists(db *sql.DB, params DateRangeParams) ([]ArtistResult, error) {
 
 // perform a query over a date range and sum play counts by hour ordinal
 // expressed in a specific timezone
-func listeningClockHelper(db *sql.DB, start, end time.Time, tz *time.Location) ([24]int, error) {
+func listeningClockHelper(db *sqlx.DB, start, end time.Time, tz *time.Location) ([24]int, error) {
 
 	var counts [24]int
 
-	query := `select strftime('%Y-%m-%d %H:00', dt) as hour, count(*) as c
+	query := db.Rebind(`select strftime('%Y-%m-%d %H:00', dt) as hour, count(*) as c
 	from activity
 	where dt >= ? and dt < ?
 	group by 1
-	order by 1;`
+	order by 1;`)
 
 	rows, err := db.Query(query, start, end)
 	if err != nil {
@@ -288,7 +291,7 @@ func listeningClockHelper(db *sql.DB, start, end time.Time, tz *time.Location) (
 	return counts, nil
 }
 
-func ListeningClock(db *sql.DB, params DateRangeParams) (*[]ClockResult, error) {
+func ListeningClock(db *sqlx.DB, params DateRangeParams) (*[]ClockResult, error) {
 
 	// allocate the memory for the result and fill in the hours
 	var res [24]ClockResult

@@ -10,6 +10,7 @@ import (
 	"bitbucket.org/grgbrn/localfm/pkg/util"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
+	"github.com/jmoiron/sqlx"
 )
 
 // database model structs
@@ -51,7 +52,7 @@ type Activity struct {
 
 // Database represents an open connection to a database
 type Database struct {
-	SQL  *sql.DB
+	SQL  *sqlx.DB
 	Path string
 	// could probably have a logger too
 }
@@ -63,7 +64,7 @@ func Open(DSN string) (*Database, error) {
 		return nil, errors.New("DSN var must be of the format 'postgresql://localfm:foobar@localhost/localfm'")
 	}
 
-	db, err := sql.Open("pgx", DSN)
+	db, err := sqlx.Open("pgx", DSN)
 	if err != nil {
 		return nil, err
 	}
