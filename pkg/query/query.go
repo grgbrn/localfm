@@ -108,12 +108,20 @@ func RecentTracks(db *sqlx.DB, trackOffset, count int) ([]ActivityResult, error)
 func TopTracks(db *sqlx.DB, params DateRangeParams) ([]TrackResult, error) {
 	var tracks []TrackResult
 
-	query := db.Rebind(`select a.artist, a.title, count(*) as plays, group_concat(distinct i.url)
+	// sqlite variant
+	// query := `select a.artist, a.title, count(*) as plays, group_concat(distinct i.url)
+	// from activity a
+	// left join image i on a.image_id = i.id
+	// where a.dt >= ? and a.dt < ?
+	// group by a.artist, a.title
+	// order by plays desc limit ?;`
+
+	query := `select a.artist, a.title, count(*) as plays, string_agg(distinct i.url, ',')
 	from activity a
 	left join image i on a.image_id = i.id
-	where a.dt >= ? and a.dt < ?
+	where a.dt >= $1 and a.dt < $2
 	group by a.artist, a.title
-	order by plays desc limit ?;`)
+	order by plays desc limit $3;`
 
 	rows, err := db.Query(query, params.Start, params.End, params.Limit)
 	if err != nil {
@@ -151,12 +159,20 @@ func TopArtists(db *sqlx.DB, params DateRangeParams) ([]ArtistResult, error) {
 
 	var artists []ArtistResult
 
-	query := db.Rebind(`select a.artist, count(*) as plays, group_concat(distinct i.url)
+	// sqlite variant
+	// query := `select a.artist, count(*) as plays, group_concat(distinct i.url)
+	// from activity a
+	// left join image i on a.image_id = i.id
+	// where a.dt >= ? and a.dt < ?
+	// group by a.artist
+	// order by plays desc limit ?;`
+
+	query := `select a.artist, count(*) as plays, string_agg(distinct i.url, ',')
 	from activity a
 	left join image i on a.image_id = i.id
-	where a.dt >= ? and a.dt < ?
+	where a.dt >= $1 and a.dt < $2
 	group by a.artist
-	order by plays desc limit ?;`)
+	order by plays desc limit $3;`
 
 	rows, err := db.Query(query, params.Start, params.End, params.Limit)
 	if err != nil {
@@ -250,11 +266,20 @@ func listeningClockHelper(db *sqlx.DB, start, end time.Time, tz *time.Location) 
 
 	var counts [24]int
 
-	query := db.Rebind(`select strftime('%Y-%m-%d %H:00', dt) as hour, count(*) as c
+	// const sqliteQuery = `select strftime('%Y-%m-%d %H:00', dt) as hour, count(*) as c
+	// 	from activity
+	// 	where dt >= ? and dt < ?
+	// 	group by 1
+	// 	order by 1;`
+	// const sqlitetimeFormat = "2006-01-02 15:04"
+
+	const query = `select date_trunc('hour', dt) as hour, count(*) as c
 	from activity
-	where dt >= ? and dt < ?
+	where dt >= $1 and dt < $2
 	group by 1
-	order by 1;`)
+	order by 1;`
+
+	const timeFormat = "2006-01-02T15:04:05-07:00"
 
 	rows, err := db.Query(query, start, end)
 	if err != nil {
@@ -273,7 +298,7 @@ func listeningClockHelper(db *sqlx.DB, start, end time.Time, tz *time.Location) 
 		}
 
 		// need to manually parse the time string
-		hour, err := time.Parse("2006-01-02 15:04", hourStr)
+		hour, err := time.Parse(timeFormat, hourStr)
 		if err != nil {
 			return counts, err
 		}
