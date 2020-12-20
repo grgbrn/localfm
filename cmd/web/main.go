@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,6 +15,9 @@ import (
 )
 
 func main() {
+	noupdatePtr := flag.Bool("noupdate", false, "Don't start the database update goroutine")
+	flag.Parse()
+
 	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
 	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
 
@@ -22,6 +26,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer db.Close()
 
 	// init session store
 	sessionSecret := os.Getenv("SESSION_SECRET")
@@ -50,19 +55,22 @@ func main() {
 		APIKey:    util.MustGetEnvStr("LASTFM_API_KEY"),
 		APISecret: util.MustGetEnvStr("LASTFM_API_SECRET"),
 		Username:  util.MustGetEnvStr("LASTFM_USERNAME"),
-
 	}
 
 	// start goroutine to kick off periodic updates of lastfm data
-	var updateLogDir = util.GetEnvStr("UPDATE_LOGIDR", "/tmp/updatelogs")
-	err = os.MkdirAll(updateLogDir, 0755)
-	if err != nil {
-		panic(err)
+	if !*noupdatePtr {
+		var updateLogDir = util.GetEnvStr("UPDATE_LOGIDR", "/tmp/updatelogs")
+		err = os.MkdirAll(updateLogDir, 0755)
+		if err != nil {
+			panic(err)
+		}
+		go app.PeriodicUpdate(
+			util.GetEnvInt("UPDATE_FREQUENCY_MINUTES", 60),
+			updateLogDir,
+			lastfmCreds)
+	} else {
+		infoLog.Println("Not starting periodic update task")
 	}
-	go app.PeriodicUpdate(
-		util.GetEnvInt("UPDATE_FREQUENCY_MINUTES", 60),
-		updateLogDir,
-		lastfmCreds)
 
 	// create & run the webserver on the main goroutine
 	addr := fmt.Sprintf(":%d", util.GetEnvInt("HTTP_PORT", 4000))

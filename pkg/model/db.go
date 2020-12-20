@@ -9,7 +9,7 @@ import (
 
 	"bitbucket.org/grgbrn/localfm/pkg/util"
 
-	_ "github.com/mattn/go-sqlite3" // blank import just to load driver
+	_ "github.com/jackc/pgx/v4/stdlib"
 )
 
 // database model structs
@@ -51,42 +51,41 @@ type Activity struct {
 
 // Database represents an open connection to a database
 type Database struct {
-	SQL   *sql.DB
+	SQL  *sql.DB
 	Path string
 	// could probably have a logger too
 }
 
 func Open(DSN string) (*Database, error) {
-	// mimic DSN format from earlier python version of this tool
-	// "sqlite:///foo.db"
-	if !strings.HasPrefix(DSN, "sqlite://") {
-		return nil, errors.New("DSN var must be of the format 'sqlite:///foo.db'")
+	// DSN name is historical, uses standard postgresql urls
+	// "postgresql://localfm:foobar@localhost/localfm"
+	if !strings.HasPrefix(DSN, "postgresql://") {
+		return nil, errors.New("DSN var must be of the format 'postgresql://localfm:foobar@localhost/localfm'")
 	}
-	dbPath := DSN[9:]
 
-	// sqlite database drivers will automatically create empty databases
-	// if the file doesn't exist, so stat the file first and abort
-	// if there's no database (must be manually created with schema)
-	if !util.FileExists(dbPath) {
-		return nil, errors.New("Can't open database [0]")
+	db, err := sql.Open("pgx", DSN)
+	if err != nil {
+		return nil, err
 	}
 
 	// Open the database and test the connection
 	// Currently nonexistent sqlite file doesn't trigger an error
 	// (won't happen until the first query)
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		return nil, err
-	}
+	// XXX check the behavior here under postgresql
 	err = db.Ping()
 	if err != nil {
 		return nil, err
 	}
 
 	return &Database{
-		SQL:db,
-		Path:dbPath,
+		SQL:  db,
+		Path: DSN,
 	}, nil
+}
+
+// Close cleans up the database connection
+func (db *Database) Close() error {
+	return db.SQL.Close()
 }
 
 // FindLatestTimestamp looks up the epoch time of the most recent db entry
