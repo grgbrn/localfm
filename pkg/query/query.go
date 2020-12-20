@@ -355,7 +355,7 @@ func ListeningClock(db *sqlx.DB, params DateRangeParams) (*[]ClockResult, error)
 		res[i].AvgCount = avgCount[i] / avgPeriod // XXX how is this truncated?
 	}
 
-	fmt.Printf("%+v\n", res)
+	// fmt.Printf("%+v\n", res)
 
 	resultSlice := res[:]
 	return &resultSlice, nil
