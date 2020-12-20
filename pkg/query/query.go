@@ -189,32 +189,18 @@ func TopNewArtists(db *sql.DB, params DateRangeParams) ([]ArtistResult, error) {
 
 	var artists []ArtistResult
 
-	query := `select a.artist, a.plays, min(a2.dt) initial,
-	a.images
-	from
-	(
-	  select a.artist, a.artist_id,
-	  count(*) as plays,
-	  group_concat(distinct i.url) as images
-	  from activity a
-	  left join image i on a.image_id = i.id
-	  where a.dt >= ? and a.dt < ?
-	  group by a.artist, a.artist_id
-	  order by plays desc
-	  limit ?
-	) a
-	join activity a2 on
-	a.artist_id = a2.artist_id
-	group by a.artist_id
-	having initial >= ? and initial < ?;`
-	queryParams := []interface{}{
-		params.Start,
-		params.End,
-		params.Limit,
-		params.Start,
-		params.End}
+	// min(image_id) is used just to choose a single image
+	query := `select a.artist, a.plays, a.first, i.url from
+	(select artist, count(*) as plays, min(dt) as first, min(image_id) as img_id
+	from activity
+	group by artist
+	having min(dt) >= ?
+	and min(dt) < ?
+	and count(*) > ?) a
+	left join image i on i.id = a.img_id
+	order by a.plays desc;`
 
-	rows, err := db.Query(query, queryParams...)
+	rows, err := db.Query(query, params.Start, params.End, 3) // 3 plays is arbitrary
 	if err != nil {
 		return artists, err
 	}
@@ -222,16 +208,16 @@ func TopNewArtists(db *sql.DB, params DateRangeParams) ([]ArtistResult, error) {
 
 	for rows.Next() {
 		tmp := "" // ignore the initial date for now
-		var groupConcat sql.NullString
+		var imageURL sql.NullString
 		res := ArtistResult{}
 
-		err = rows.Scan(&res.Name, &res.PlayCount, &tmp, &groupConcat)
+		err = rows.Scan(&res.Name, &res.PlayCount, &tmp, &imageURL)
 		if err != nil {
 			return artists, err
 		}
 
-		if groupConcat.Valid {
-			res.ImageURLs = strings.Split(groupConcat.String, ",")
+		if imageURL.Valid {
+			res.ImageURLs = strings.Split(imageURL.String, ",")
 		} else {
 			res.ImageURLs = []string{}
 		}
