@@ -27,6 +27,7 @@ func main() {
 		panic(err)
 	}
 	defer db.Close()
+	infoLog.Printf("Connecting to database: %s\n", db.Path)
 
 	// init session store
 	sessionSecret := os.Getenv("SESSION_SECRET")

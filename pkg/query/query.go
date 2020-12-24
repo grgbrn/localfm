@@ -9,6 +9,9 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+const sqliteDriver = "sqlite3"
+const postgresDriver = "pgx"
+
 // DateRangeParams represents query params over a date range
 type DateRangeParams struct {
 	Mode  string
@@ -106,22 +109,27 @@ func RecentTracks(db *sqlx.DB, trackOffset, count int) ([]ActivityResult, error)
 // TopTracks finds the most popular tracks by play count over
 // a bounded time period
 func TopTracks(db *sqlx.DB, params DateRangeParams) ([]TrackResult, error) {
+
+	var query string
+	if db.DriverName() == sqliteDriver {
+		query = `select a.artist, a.title, count(*) as plays, group_concat(distinct i.url)
+		from activity a
+		left join image i on a.image_id = i.id
+		where a.dt >= ? and a.dt < ?
+		group by a.artist, a.title
+		order by plays desc limit ?;`
+	} else if db.DriverName() == postgresDriver {
+		query = `select a.artist, a.title, count(*) as plays, string_agg(distinct i.url, ',')
+		from activity a
+		left join image i on a.image_id = i.id
+		where a.dt >= $1 and a.dt < $2
+		group by a.artist, a.title
+		order by plays desc limit $3;`
+	} else {
+		panic("unknown database") // XXX
+	}
+
 	var tracks []TrackResult
-
-	// sqlite variant
-	// query := `select a.artist, a.title, count(*) as plays, group_concat(distinct i.url)
-	// from activity a
-	// left join image i on a.image_id = i.id
-	// where a.dt >= ? and a.dt < ?
-	// group by a.artist, a.title
-	// order by plays desc limit ?;`
-
-	query := `select a.artist, a.title, count(*) as plays, string_agg(distinct i.url, ',')
-	from activity a
-	left join image i on a.image_id = i.id
-	where a.dt >= $1 and a.dt < $2
-	group by a.artist, a.title
-	order by plays desc limit $3;`
 
 	rows, err := db.Query(query, params.Start, params.End, params.Limit)
 	if err != nil {
@@ -157,22 +165,26 @@ func TopTracks(db *sqlx.DB, params DateRangeParams) ([]TrackResult, error) {
 // a bounded time period
 func TopArtists(db *sqlx.DB, params DateRangeParams) ([]ArtistResult, error) {
 
+	var query string
+	if db.DriverName() == sqliteDriver {
+		query = `select a.artist, count(*) as plays, group_concat(distinct i.url)
+		from activity a
+		left join image i on a.image_id = i.id
+		where a.dt >= ? and a.dt < ?
+		group by a.artist
+		order by plays desc limit ?;`
+	} else if db.DriverName() == postgresDriver {
+		query = `select a.artist, count(*) as plays, string_agg(distinct i.url, ',')
+		from activity a
+		left join image i on a.image_id = i.id
+		where a.dt >= $1 and a.dt < $2
+		group by a.artist
+		order by plays desc limit $3;`
+	} else {
+		panic("unknown database") // XXX
+	}
+
 	var artists []ArtistResult
-
-	// sqlite variant
-	// query := `select a.artist, count(*) as plays, group_concat(distinct i.url)
-	// from activity a
-	// left join image i on a.image_id = i.id
-	// where a.dt >= ? and a.dt < ?
-	// group by a.artist
-	// order by plays desc limit ?;`
-
-	query := `select a.artist, count(*) as plays, string_agg(distinct i.url, ',')
-	from activity a
-	left join image i on a.image_id = i.id
-	where a.dt >= $1 and a.dt < $2
-	group by a.artist
-	order by plays desc limit $3;`
 
 	rows, err := db.Query(query, params.Start, params.End, params.Limit)
 	if err != nil {
@@ -209,6 +221,7 @@ func TopNewArtists(db *sqlx.DB, params DateRangeParams) ([]ArtistResult, error) 
 	var artists []ArtistResult
 
 	// min(image_id) is used just to choose a single image
+	// XXX why does this work without a rebind?
 	query := `select a.artist, a.plays, a.first, i.url from
 	(select artist, count(*) as plays, min(dt) as first, min(image_id) as img_id
 	from activity
@@ -250,22 +263,28 @@ func TopNewArtists(db *sqlx.DB, params DateRangeParams) ([]ArtistResult, error) 
 // expressed in a specific timezone
 func listeningClockHelper(db *sqlx.DB, start, end time.Time, tz *time.Location) ([24]int, error) {
 
+	var query string
+	var timeFormat string
+
+	if db.DriverName() == sqliteDriver {
+		query = `select strftime('%Y-%m-%d %H:00', dt) as hour, count(*) as c
+		from activity
+		where dt >= ? and dt < ?
+		group by 1
+		order by 1;`
+		timeFormat = "2006-01-02 15:04"
+	} else if db.DriverName() == postgresDriver {
+		query = `select date_trunc('hour', dt) as hour, count(*) as c
+		from activity
+		where dt >= $1 and dt < $2
+		group by 1
+		order by 1;`
+		timeFormat = "2006-01-02T15:04:05-07:00"
+	} else {
+		panic("unknown database") // XXX
+	}
+
 	var counts [24]int
-
-	// const sqliteQuery = `select strftime('%Y-%m-%d %H:00', dt) as hour, count(*) as c
-	// 	from activity
-	// 	where dt >= ? and dt < ?
-	// 	group by 1
-	// 	order by 1;`
-	// const sqlitetimeFormat = "2006-01-02 15:04"
-
-	const query = `select date_trunc('hour', dt) as hour, count(*) as c
-	from activity
-	where dt >= $1 and dt < $2
-	group by 1
-	order by 1;`
-
-	const timeFormat = "2006-01-02T15:04:05-07:00"
 
 	rows, err := db.Query(query, start, end)
 	if err != nil {

@@ -10,6 +10,8 @@ import (
 	"bitbucket.org/grgbrn/localfm/pkg/util"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
+	_ "github.com/mattn/go-sqlite3" // blank import just to load driver
+
 	"github.com/jmoiron/sqlx"
 )
 
@@ -50,21 +52,49 @@ type Activity struct {
 	AlbumName  string
 }
 
+type DatabaseType int
+
+const (
+	DatabaseTypeSqlite DatabaseType = iota
+	DatabaseTypePostgres
+)
+
 // Database represents an open connection to a database
 type Database struct {
 	SQL  *sqlx.DB
 	Path string
+	Type DatabaseType
 	// could probably have a logger too
 }
 
 func Open(DSN string) (*Database, error) {
-	// DSN name is historical, uses standard postgresql urls
-	// "postgresql://localfm:foobar@localhost/localfm"
-	if !strings.HasPrefix(DSN, "postgresql://") {
-		return nil, errors.New("DSN var must be of the format 'postgresql://localfm:foobar@localhost/localfm'")
+
+	var driverName string
+	var path string
+	var databaseType DatabaseType
+
+	switch {
+	case strings.HasPrefix(DSN, "sqlite://"):
+		driverName = "sqlite3"
+		path = DSN[9:]
+		databaseType = DatabaseTypeSqlite
+
+		if !util.FileExists(path) {
+			return nil, errors.New("Can't open database [0]")
+		}
+	case strings.HasPrefix(DSN, "postgresql://"):
+		driverName = "pgx"
+		path = DSN
+		databaseType = DatabaseTypePostgres
+
+		// XXX can we further validate the connection string?
+	default:
+		panic("unknown database format") // XXX
+		// return nil, errors.New("DSN var must be of the format 'sqlite:///foo.db'")
+		// return nil, errors.New("DSN var must be of the format 'postgresql://localfm:foobar@localhost/localfm'")
 	}
 
-	db, err := sqlx.Open("pgx", DSN)
+	db, err := sqlx.Open(driverName, path)
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +111,7 @@ func Open(DSN string) (*Database, error) {
 	return &Database{
 		SQL:  db,
 		Path: DSN,
+		Type: databaseType,
 	}, nil
 }
 
