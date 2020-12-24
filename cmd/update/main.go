@@ -20,7 +20,6 @@ func main() {
 	quietPtr := flag.Bool("quiet", false, "Don't print to stdout")
 
 	//dupePtr := flag.Bool("duplicates", false, "Check entire database for duplicates")
-
 	flag.Parse()
 
 	//
@@ -34,6 +33,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	fmt.Printf("Connecting to database: %s\n", db.Path)
 
 	//
 	// load lastfm credentials

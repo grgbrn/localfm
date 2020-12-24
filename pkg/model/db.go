@@ -59,6 +59,9 @@ const (
 	DatabaseTypePostgres
 )
 
+const sqliteDriver = "sqlite3"
+const postgresDriver = "pgx"
+
 // Database represents an open connection to a database
 type Database struct {
 	SQL  *sqlx.DB
@@ -130,7 +133,7 @@ func (db *Database) FindLatestTimestamp() (int64, error) {
 	checkdb := `SELECT count(*) FROM activity`
 
 	var tmp int
-	err := db.SQL.QueryRow(checkdb, 1).Scan(&tmp)
+	err := db.SQL.QueryRow(checkdb).Scan(&tmp)
 	if err != nil {
 		return maxTime, err
 	}
@@ -140,7 +143,7 @@ func (db *Database) FindLatestTimestamp() (int64, error) {
 
 	findmax := `SELECT max(uts) FROM activity`
 
-	err = db.SQL.QueryRow(findmax, 1).Scan(&maxTime)
+	err = db.SQL.QueryRow(findmax).Scan(&maxTime)
 	if err != nil {
 		return maxTime, err
 	}
@@ -157,7 +160,7 @@ func (db *Database) StoreActivity(tracks []TrackInfo) error {
 		return err
 	}
 
-	additem := `
+	additem := db.SQL.Rebind(`
 	INSERT INTO activity(
 		uts,
 		dt,
@@ -170,7 +173,8 @@ func (db *Database) StoreActivity(tracks []TrackInfo) error {
 		album_id,
 		image_id
 	) values (?,?,?,?,?,?,?,?,?,?)
-	`
+	`)
+
 	stmt, err := tx.Prepare(additem)
 	if err != nil {
 		return err
@@ -191,7 +195,7 @@ func (db *Database) StoreActivity(tracks []TrackInfo) error {
 
 		// so all three of those must be resolved before the activity row
 		// can be created
-		artist, e = getOrCreateArtist(tx, track.Artist.Name, track.Artist.Mbid)
+		artist, e = getOrCreateArtist(db.SQL, tx, track.Artist.Name, track.Artist.Mbid)
 		if e != nil {
 			fmt.Printf("error inserting artist:%s mbid:%s\n", track.Artist.Name, track.Artist.Mbid)
 			fmt.Println(e)
@@ -199,7 +203,7 @@ func (db *Database) StoreActivity(tracks []TrackInfo) error {
 		}
 		fmt.Println(artist)
 
-		album, e = getOrCreateAlbum(tx, track.Album.Name, track.Album.Mbid)
+		album, e = getOrCreateAlbum(db.SQL, tx, track.Album.Name, track.Album.Mbid)
 		if e != nil {
 			fmt.Printf("error inserting album:%s mbid:%s\n", track.Album.Name, track.Album.Mbid)
 			fmt.Println(e)
@@ -207,7 +211,7 @@ func (db *Database) StoreActivity(tracks []TrackInfo) error {
 		}
 
 		u := ChooseImageURL(track)
-		image, e = getOrCreateImage(tx, u)
+		image, e = getOrCreateImage(db.SQL, tx, u)
 		if e != nil {
 			fmt.Printf("error inserting image:%s mbid:%s\n", track.Album.Name, track.Album.Mbid)
 			fmt.Println(e)
@@ -261,7 +265,7 @@ func toNullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
 }
 
-func getOrCreateArtist(tx *sql.Tx, name string, mbid string) (Artist, error) {
+func getOrCreateArtist(db *sqlx.DB, tx *sql.Tx, name string, mbid string) (Artist, error) {
 
 	var artist Artist
 	var err error
@@ -271,28 +275,34 @@ func getOrCreateArtist(tx *sql.Tx, name string, mbid string) (Artist, error) {
 	// select query depends on whether mbid value is null
 	var selQuery string
 	if nullMBID.Valid { // not null
-		selQuery = `SELECT id, name, mbid FROM artist WHERE name=? and mbid=?`
+		selQuery = db.Rebind(`SELECT id, name, mbid FROM artist WHERE name=? and mbid=?`)
 		err = tx.QueryRow(selQuery, name, nullMBID).Scan(&artist.ID, &artist.Name, &artist.MBID)
 	} else {
-		selQuery = `SELECT id, name, mbid FROM artist WHERE name=? and mbid is null`
+		selQuery = db.Rebind(`SELECT id, name, mbid FROM artist WHERE name=? and mbid is null`)
 		err = tx.QueryRow(selQuery, name).Scan(&artist.ID, &artist.Name, &artist.MBID)
 	}
 	if err == nil { // found existing entry
 		return artist, nil
 	}
 
-	// otherwise have to create a new one
-	insQuery := `INSERT INTO artist(name, mbid) values (?,?)`
-	res, err := tx.Exec(insQuery, name, nullMBID)
-	if err != nil {
-		// error creating new row
-		return artist, err
+	var lastID int64
+
+	if db.DriverName() == sqliteDriver {
+		lastID, err = insertReturningSqlite(tx,
+			`INSERT INTO artist(name, mbid) values (?,?)`,
+			name, nullMBID)
+	} else if db.DriverName() == postgresDriver {
+		lastID, err = insertReturningPostgres(tx,
+			`INSERT INTO artist(name, mbid) values ($1,$2) returning id`,
+			name, nullMBID)
+	} else {
+		panic("unknown database")
 	}
-	// need to return an artist struct with newly created ID
-	lastID, err := res.LastInsertId()
+
 	if err != nil {
-		return artist, err
+		return Artist{}, err
 	}
+
 	artist.ID = lastID
 	artist.Name = name
 	artist.MBID = nullMBID
@@ -300,7 +310,7 @@ func getOrCreateArtist(tx *sql.Tx, name string, mbid string) (Artist, error) {
 	return artist, nil
 }
 
-func getOrCreateAlbum(tx *sql.Tx, name string, mbid string) (Album, error) {
+func getOrCreateAlbum(db *sqlx.DB, tx *sql.Tx, name string, mbid string) (Album, error) {
 
 	var album Album
 	var err error
@@ -310,28 +320,34 @@ func getOrCreateAlbum(tx *sql.Tx, name string, mbid string) (Album, error) {
 	// select query depends on whether mbid value is null
 	var selQuery string
 	if nullMBID.Valid { // not null
-		selQuery = `SELECT id, name, mbid FROM album WHERE name=? and mbid=?`
+		selQuery = db.Rebind(`SELECT id, name, mbid FROM album WHERE name=? and mbid=?`)
 		err = tx.QueryRow(selQuery, name, nullMBID).Scan(&album.ID, &album.Name, &album.MBID)
 	} else {
-		selQuery = `SELECT id, name, mbid FROM album WHERE name=? and mbid is null`
+		selQuery = db.Rebind(`SELECT id, name, mbid FROM album WHERE name=? and mbid is null`)
 		err = tx.QueryRow(selQuery, name).Scan(&album.ID, &album.Name, &album.MBID)
 	}
 	if err == nil { // found existing entry
 		return album, nil
 	}
 
-	// otherwise have to create a new one
-	insQuery := `INSERT INTO album(name, mbid) values (?,?)`
-	res, err := tx.Exec(insQuery, name, nullMBID)
-	if err != nil {
-		// error creating new row
-		return album, err
+	var lastID int64
+
+	if db.DriverName() == sqliteDriver {
+		lastID, err = insertReturningSqlite(tx,
+			`INSERT INTO album(name, mbid) values (?,?)`,
+			name, nullMBID)
+	} else if db.DriverName() == postgresDriver {
+		lastID, err = insertReturningPostgres(tx,
+			`INSERT INTO album(name, mbid) values ($1,$2) returning id`,
+			name, nullMBID)
+	} else {
+		panic("unknown database")
 	}
-	// need to return an album struct with newly created ID
-	lastID, err := res.LastInsertId()
+
 	if err != nil {
-		return album, err
+		return Album{}, err
 	}
+
 	album.ID = lastID
 	album.Name = name
 	album.MBID = nullMBID
@@ -339,34 +355,64 @@ func getOrCreateAlbum(tx *sql.Tx, name string, mbid string) (Album, error) {
 	return album, nil
 }
 
-func getOrCreateImage(tx *sql.Tx, url string) (Image, error) {
+func getOrCreateImage(db *sqlx.DB, tx *sql.Tx, url string) (Image, error) {
 
 	var image Image
 	var err error
 
-	selQuery := `SELECT id, url FROM image WHERE url=?`
+	selQuery := db.Rebind(`SELECT id, url FROM image WHERE url=?`)
 	err = tx.QueryRow(selQuery, url).Scan(&image.ID, &image.URL)
 
 	if err == nil { // found existing entry
 		return image, nil
 	}
 
-	// otherwise have to create a new one
-	insQuery := `INSERT INTO image(url) values (?)`
-	res, err := tx.Exec(insQuery, url)
-	if err != nil {
-		// error creating new row
-		return image, err
+	var lastID int64
+
+	if db.DriverName() == sqliteDriver {
+		lastID, err = insertReturningSqlite(tx,
+			`INSERT INTO image(url) values (?)`,
+			url)
+	} else if db.DriverName() == postgresDriver {
+		lastID, err = insertReturningPostgres(tx,
+			`INSERT INTO image(url) values ($1) returning id`,
+			url)
+	} else {
+		panic("unknown database")
 	}
-	// need to return an image struct with newly created ID
-	lastID, err := res.LastInsertId()
+
 	if err != nil {
-		return image, err
+		return Image{}, err
 	}
+
 	image.ID = lastID
 	image.URL = url
 
 	return image, nil
+}
+
+func insertReturningSqlite(tx *sql.Tx, query string, args ...interface{}) (int64, error) {
+	res, err := tx.Exec(query, args...)
+	if err != nil {
+		// error creating new row
+		return 0, err
+	}
+	// need to return an album struct with newly created ID
+	lastID, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return lastID, nil
+}
+
+// query must have a 'returning' clause for this to work
+func insertReturningPostgres(tx *sql.Tx, query string, args ...interface{}) (int64, error) {
+	var id int64
+	err := tx.QueryRow(query, args...).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 //
