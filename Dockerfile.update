@@ -1,0 +1,11 @@
+# syntax=docker/dockerfile:1
+FROM debian:stable-slim
+RUN apt-get update
+RUN apt-get install -y ca-certificates
+WORKDIR /app
+# XXX remove this!
+COPY localfm.db /app
+COPY checkpoint.json /app
+
+COPY dist/update /app
+CMD ["/app/update"]
