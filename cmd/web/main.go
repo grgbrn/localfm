@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"bitbucket.org/grgbrn/localfm/pkg/model"
-	"bitbucket.org/grgbrn/localfm/pkg/update"
 	"bitbucket.org/grgbrn/localfm/pkg/util"
 	"bitbucket.org/grgbrn/localfm/pkg/web"
 )
@@ -44,25 +43,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	// load lastfm credentials
-	lastfmCreds := update.LastFMCredentials{
-		APIKey:    util.MustGetEnvStr("LASTFM_API_KEY"),
-		APISecret: util.MustGetEnvStr("LASTFM_API_SECRET"),
-		Username:  util.MustGetEnvStr("LASTFM_USERNAME"),
-
-	}
-
-	// start goroutine to kick off periodic updates of lastfm data
-	var updateLogDir = util.GetEnvStr("UPDATE_LOGIDR", "/tmp/updatelogs")
-	err = os.MkdirAll(updateLogDir, 0755)
-	if err != nil {
-		panic(err)
-	}
-	go app.PeriodicUpdate(
-		util.GetEnvInt("UPDATE_FREQUENCY_MINUTES", 60),
-		updateLogDir,
-		lastfmCreds)
 
 	// create & run the webserver on the main goroutine
 	addr := fmt.Sprintf(":%d", util.GetEnvInt("HTTP_PORT", 4000))
