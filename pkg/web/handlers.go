@@ -10,9 +10,7 @@ import (
 	"bitbucket.org/grgbrn/localfm/pkg/query"
 )
 
-//
 // login pages
-//
 func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		renderTemplate(w, "login", &templateData{})
@@ -63,9 +61,7 @@ func (app *Application) logoutUser(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-//
 // authenticated app pages
-//
 func index(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -75,16 +71,67 @@ func index(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "./recent", http.StatusTemporaryRedirect)
 }
 
-func recentPage(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, "recent", nil)
+func (app *Application) recentPage(w http.ResponseWriter, r *http.Request) {
+
+	offsetParams, err := extractOffsetParams(r)
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	recentTracks, err := query.RecentTracks(app.db.SQL, offsetParams.Offset, offsetParams.Count)
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	type recentData struct {
+		Fake   int // XXX
+		Tracks []query.ActivityResult
+	}
+
+	tmp := recentData{
+		Fake:   123,
+		Tracks: recentTracks,
+	}
+
+	renderTemplate(w, "recent", tmp)
 }
 
-func tracksPage(w http.ResponseWriter, r *http.Request) {
+func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, "tracks", nil)
 }
 
-func artistsPage(w http.ResponseWriter, r *http.Request) {
+func (app *Application) artistsPage(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, "artists", nil)
+}
+
+func extractOffsetParams(r *http.Request) (query.OffsetParams, error) {
+	var err error
+
+	// defaults
+	result := query.OffsetParams{
+		Offset: 0,
+		Count:  20,
+	}
+
+	// get offset & count params, both optional
+	offStr := r.URL.Query().Get("offset")
+	if offStr != "" {
+		result.Offset, err = strconv.Atoi(offStr)
+		if err != nil {
+			return result, errors.New("error parsing parameter: offset")
+		}
+	}
+	countStr := r.URL.Query().Get("count")
+	if countStr != "" {
+		result.Count, err = strconv.Atoi(countStr)
+		if err != nil {
+			return result, errors.New("error parsing parameter: count")
+		}
+	}
+
+	return result, nil
 }
 
 // extractDateRangeParams translates mode=X&offset=Y parameters
@@ -157,9 +204,7 @@ func extractDateRangeParams(r *http.Request) (query.DateRangeParams, error) {
 	return params, nil
 }
 
-//
 // json data handlers
-//
 func (app *Application) topArtistsData(w http.ResponseWriter, r *http.Request) {
 
 	type topArtistsResponse struct {
@@ -260,35 +305,21 @@ func (app *Application) recentTracksData(w http.ResponseWriter, r *http.Request)
 		Tracks []query.ActivityResult `json:"activity"`
 	}
 
-	// get offset & count params, both optional
-	offset := 0 // default
-	offStr := r.URL.Query().Get("offset")
-	if offStr != "" {
-		offset, err = strconv.Atoi(offStr)
-		if err != nil {
-			app.serverError(w, errors.New("error parsing parameter: offset"))
-			return
-		}
-	}
-	count := 20 // default
-	countStr := r.URL.Query().Get("count")
-	if countStr != "" {
-		count, err = strconv.Atoi(countStr)
-		if err != nil {
-			app.serverError(w, errors.New("error parsing parameter: count"))
-			return
-		}
+	offsetParams, err := extractOffsetParams(r)
+	if err != nil {
+		app.serverError(w, err)
+		return
 	}
 
-	recentTracks, err := query.RecentTracks(app.db.SQL, offset, count)
+	recentTracks, err := query.RecentTracks(app.db.SQL, offsetParams.Offset, offsetParams.Count)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
 	renderJSON(w, http.StatusOK, recentTracksResponse{
-		Offset: offset,
-		Count:  count,
+		Offset: offsetParams.Offset,
+		Count:  offsetParams.Count,
 		Tracks: recentTracks,
 	})
 }

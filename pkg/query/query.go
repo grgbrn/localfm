@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+type OffsetParams struct {
+	Offset int
+	Count  int
+}
+
 // DateRangeParams represents query params over a date range
 type DateRangeParams struct {
 	Mode  string

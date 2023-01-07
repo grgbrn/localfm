@@ -62,9 +62,9 @@ func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Ap
 
 	// app pages
 	mux.Handle("/", protectedMiddleware.ThenFunc(index))
-	mux.Handle("/recent", protectedMiddleware.ThenFunc(recentPage))
-	mux.Handle("/tracks", protectedMiddleware.ThenFunc(tracksPage))
-	mux.Handle("/artists", protectedMiddleware.ThenFunc(artistsPage))
+	mux.Handle("/recent", protectedMiddleware.ThenFunc(app.recentPage))
+	mux.Handle("/tracks", protectedMiddleware.ThenFunc(app.tracksPage))
+	mux.Handle("/artists", protectedMiddleware.ThenFunc(app.artistsPage))
 
 	// data calls
 	mux.Handle("/data/topArtists", dataMiddleware.ThenFunc(app.topArtistsData))
