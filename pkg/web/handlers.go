@@ -85,13 +85,26 @@ func (app *Application) recentPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// figure out previous/next links
+	var nextLink, prevLink string
+	prevLink = fmt.Sprintf("/recent?offset=%d&count=%d", offsetParams.Offset+1, offsetParams.Count)
+	if offsetParams.Offset > 0 {
+		nextLink = fmt.Sprintf("/recent?offset=%d&count=%d", offsetParams.Offset-1, offsetParams.Count)
+	}
+
 	type recentData struct {
-		Fake   int // XXX
+		Title    string
+		Previous string
+		Next     string
+
 		Tracks []query.ActivityResult
 	}
 
 	tmp := recentData{
-		Fake:   123,
+		Title:    "Recently Played Tracks",
+		Previous: prevLink,
+		Next:     nextLink,
+
 		Tracks: recentTracks,
 	}
 

@@ -2,6 +2,7 @@ package query
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -68,6 +69,15 @@ type ClockResult struct {
 // RecentTracks finds the most recently played tracks, with a simple page
 // offset and count
 func RecentTracks(db *sql.DB, trackOffset, count int) ([]ActivityResult, error) {
+
+	if trackOffset < 0 {
+		return nil, errors.New("invalid parameter: trackOffset must be > 0")
+	}
+
+	if count < 0 {
+		return nil, errors.New("invalid parameter: count must be > 0")
+	}
+
 	var tracks []ActivityResult
 
 	query := `select a.artist, a.title, a.album, a.dt, i.url
