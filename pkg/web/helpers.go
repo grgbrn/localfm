@@ -46,7 +46,9 @@ func renderTemplate(w http.ResponseWriter, tmpl string, td interface{}) {
 		prefix += "/"
 	}
 	files := []string{
-		prefix + tmpl + ".page.tmpl",
+		//prefix + tmpl + ".page.tmpl",
+		prefix + tmpl,
+		prefix + "recent.tmpl",
 		prefix + "base.layout.tmpl",
 		prefix + "topnav.partial.tmpl",
 		prefix + "datebar.partial.tmpl",

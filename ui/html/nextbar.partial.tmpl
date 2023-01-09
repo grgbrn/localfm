@@ -6,13 +6,14 @@
   <div class="datebar-controls">
     {{ if (ne .Previous "") }}
     <div>
-      <a id="prevlink" href="{{.Previous}}">&#8592; Previous</a>
+    <!-- XXX hx-target should be parameterized -->
+      <a id="prevlink" href="#" hx-get="{{.Previous}}" hx-target="#monthly-pagegrid" >&#8592; Previous</a>
     </div>
     {{ end }}
 
     {{ if (ne .Next "") }}
     <div>
-      <a id="nextlink" href="{{.Next}}">Next &#8594;</a>
+      <a id="nextlink" href="#" hx-get="{{.Next}}" hx-target="#monthly-pagegrid" >Next &#8594;</a>
     </div>
     {{ end }}
   </div>

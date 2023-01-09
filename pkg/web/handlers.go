@@ -13,7 +13,7 @@ import (
 // login pages
 func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		renderTemplate(w, "login", &templateData{})
+		renderTemplate(w, "login.page.tmpl", &templateData{})
 	} else if r.Method == "POST" {
 		err := r.ParseForm()
 		if err != nil {
@@ -34,7 +34,7 @@ func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if userID == -1 {
-			renderTemplate(w, "login", &templateData{
+			renderTemplate(w, "login.page.tmpl", &templateData{
 				Error: "Email or Password is incorrect",
 			})
 			return
@@ -71,7 +71,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "./recent", http.StatusTemporaryRedirect)
 }
 
-func (app *Application) recentPage(w http.ResponseWriter, r *http.Request) {
+func (app *Application) recentPage(w http.ResponseWriter, r *http.Request, tmpl string) {
 
 	offsetParams, err := extractOffsetParams(r)
 	if err != nil {
@@ -87,9 +87,9 @@ func (app *Application) recentPage(w http.ResponseWriter, r *http.Request) {
 
 	// figure out previous/next links
 	var nextLink, prevLink string
-	prevLink = fmt.Sprintf("/recent?offset=%d&count=%d", offsetParams.Offset+1, offsetParams.Count)
+	prevLink = fmt.Sprintf("/htmx/recentTracks?offset=%d&count=%d", offsetParams.Offset+1, offsetParams.Count)
 	if offsetParams.Offset > 0 {
-		nextLink = fmt.Sprintf("/recent?offset=%d&count=%d", offsetParams.Offset-1, offsetParams.Count)
+		nextLink = fmt.Sprintf("/htmx/recentTracks?offset=%d&count=%d", offsetParams.Offset-1, offsetParams.Count)
 	}
 
 	type recentData struct {
@@ -108,15 +108,15 @@ func (app *Application) recentPage(w http.ResponseWriter, r *http.Request) {
 		Tracks: recentTracks,
 	}
 
-	renderTemplate(w, "recent", tmp)
+	renderTemplate(w, tmpl, tmp)
 }
 
 func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, "tracks", nil)
+	renderTemplate(w, "tracks.page.tmpl", nil)
 }
 
 func (app *Application) artistsPage(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, "artists", nil)
+	renderTemplate(w, "artists.page.tmpl", nil)
 }
 
 func extractOffsetParams(r *http.Request) (query.OffsetParams, error) {
