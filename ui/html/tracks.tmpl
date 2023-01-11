@@ -1,0 +1,44 @@
+{{define "tracks"}}
+    <div class="mtracks">
+      <table class="listview">
+        <tbody>
+        <!-- TODO: what about empty TopTracks -->
+        {{ range .TopTracks }}
+          <tr>
+            <td>{{.Rank}}</td>
+            <td><img class="coverimg" src="{{ index .ImageURLs 0}}" alt=""></td>
+            <td><em>{{.Title}}</em><br><span>{{.Artist}}</span></td>
+            <td>{{.PlayCount}}</td>
+          </tr>
+        {{ end }}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- sidebar container with multiple sub-tiles -->
+    <div class="sidebar-container">
+      <!-- chart tile (kind of ugly) -->
+      <div class="chartcontainer">
+        <canvas id="myChart"></canvas>
+      </div>
+
+      <!-- new artists tile -->
+      <div class="newartists">
+        <h3>New Artists</h3>
+        <table class="tinylist">
+          <tbody>
+          {{ if .TopArtists }}
+            {{ range .TopArtists }}
+              <tr>
+                <td><img class="avatar" src="{{ index .ImageURLs 0}}" alt=""></td>
+                <td><em>{{ .Name }}</em><br><span>{{ .PlayCount }}</span> tracks</td>
+              </tr>
+            {{ end }}
+          {{ else }}
+            <tr><td>No new artists</td></tr>
+          {{ end }}
+          </tbody>
+        </table>
+      </div>
+    </div>
+{{ end }}

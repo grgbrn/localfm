@@ -289,7 +289,7 @@ func listeningClockHelper(db *sql.DB, start, end time.Time, tz *time.Location) (
 	return counts, nil
 }
 
-func ListeningClock(db *sql.DB, params DateRangeParams) (*[]ClockResult, error) {
+func ListeningClock(db *sql.DB, params DateRangeParams) ([]ClockResult, error) {
 
 	// allocate the memory for the result and fill in the hours
 	var res [24]ClockResult
@@ -328,8 +328,6 @@ func ListeningClock(db *sql.DB, params DateRangeParams) (*[]ClockResult, error) 
 		res[i].AvgCount = avgCount[i] / avgPeriod // XXX how is this truncated?
 	}
 
-	fmt.Printf("%+v\n", res)
-
 	resultSlice := res[:]
-	return &resultSlice, nil
+	return resultSlice, nil
 }

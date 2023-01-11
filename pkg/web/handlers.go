@@ -92,7 +92,7 @@ func (app *Application) recentPage(w http.ResponseWriter, r *http.Request, tmpl 
 		nextLink = fmt.Sprintf("/htmx/recentTracks?offset=%d&count=%d", offsetParams.Offset-1, offsetParams.Count)
 	}
 
-	type recentData struct {
+	type recentTemplateData struct {
 		Title    string
 		Previous string
 		Next     string
@@ -100,7 +100,7 @@ func (app *Application) recentPage(w http.ResponseWriter, r *http.Request, tmpl 
 		Tracks []query.ActivityResult
 	}
 
-	tmp := recentData{
+	tmp := recentTemplateData{
 		Title:    "Recently Played Tracks",
 		Previous: prevLink,
 		Next:     nextLink,
@@ -112,7 +112,65 @@ func (app *Application) recentPage(w http.ResponseWriter, r *http.Request, tmpl 
 }
 
 func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, "tracks.page.tmpl", nil)
+
+	params, err := extractDateRangeParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// XXX i have 3 queries to perform here, do them in parallel?
+
+	topTracks, err := query.TopTracks(app.db.SQL, params)
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	topArtists, err := query.TopNewArtists(app.db.SQL, params)
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	clock, err := query.ListeningClock(app.db.SQL, params)
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	type clockTemplateData struct {
+		GraphTitle string `json:"title"`
+		AvgLabel   string `json:"label"`
+
+		CurrentValues []int `json:"currentValues"`
+		AverageValues []int `json:"avgValues"`
+	}
+
+	clockData := clockTemplateData{
+		GraphTitle:    "XXXly listening times",
+		AvgLabel:      "6 XXX avg",
+		CurrentValues: make([]int, 24),
+		AverageValues: make([]int, 24),
+	}
+	for ix, val := range clock {
+		clockData.CurrentValues[ix] = val.PlayCount
+		clockData.AverageValues[ix] = val.AvgCount
+	}
+
+	type trackTemplateData struct {
+		TopTracks  []query.TrackResult
+		TopArtists []query.ArtistResult
+		ClockData  clockTemplateData
+	}
+
+	tmp := trackTemplateData{
+		TopTracks:  topTracks,
+		TopArtists: topArtists,
+		ClockData:  clockData,
+	}
+
+	renderTemplate(w, "tracks.page.tmpl", tmp)
 }
 
 func (app *Application) artistsPage(w http.ResponseWriter, r *http.Request) {
@@ -157,14 +215,14 @@ func extractDateRangeParams(r *http.Request) (query.DateRangeParams, error) {
 	// required param: mode
 	mode := r.URL.Query().Get("mode")
 	if mode == "" {
-		return params, errors.New("missing required parameter: mode")
+		mode = "month"
 	}
 	params.Mode = mode
 
 	// required param: offset
 	offStr := r.URL.Query().Get("offset")
 	if offStr == "" {
-		return params, errors.New("missing required parameter: offset")
+		offStr = "1"
 	}
 	offset, err := strconv.Atoi(offStr)
 	if err != nil {
@@ -340,10 +398,10 @@ func (app *Application) recentTracksData(w http.ResponseWriter, r *http.Request)
 func (app *Application) listeningClockData(w http.ResponseWriter, r *http.Request) {
 
 	type listeningClockResponse struct {
-		Mode      string               `json:"mode"`
-		StartDate time.Time            `json:"startDate"`
-		EndDate   time.Time            `json:"endDate"`
-		Clock     *[]query.ClockResult `json:"clock"`
+		Mode      string              `json:"mode"`
+		StartDate time.Time           `json:"startDate"`
+		EndDate   time.Time           `json:"endDate"`
+		Clock     []query.ClockResult `json:"clock"`
 	}
 
 	params, err := extractDateRangeParams(r)
