@@ -172,7 +172,7 @@ func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request, templ
 		TopTracks:  topTracks,
 		TopArtists: topArtists,
 		ClockData: clockTemplateData{
-			GraphTitle:    unitTitle + "ly listening times",
+			GraphTitle:    unitTitle + "ly Listening Times",
 			AvgLabel:      "6 " + unitTitle + " avg",
 			CurrentValues: currentClockValues,
 			AverageValues: avgClockValues,

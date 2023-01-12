@@ -23,6 +23,8 @@ window.refreshListeningChart = function (clockData) {
                 data: clockData.currentValues,
                 backgroundColor: 'rgba(0,0,255,0.6)',
                 borderColor: 'blue',
+                fill: true,
+                tension: 0.4,
             }, {
                 label: clockData.label,
                 data: clockData.avgValues,
@@ -30,10 +32,6 @@ window.refreshListeningChart = function (clockData) {
         },
         options: {
             responsive: true,
-            title: {
-                display: true,
-                text: clockData.title
-            },
             tooltips: {
                 mode: 'index',
                 intersect: false,
@@ -43,20 +41,24 @@ window.refreshListeningChart = function (clockData) {
                 intersect: true
             },
             scales: {
-                xAxes: [{
+                x: {
+                    title: {
+                        display: true,
+                        text: "Hour"
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: "Tracks Played"
+                    }
+                }
+            },
+            plugins: {
+                title: {
                     display: true,
-                    scaleLabel: {
-                        display: true,
-                        labelString: 'Hour'
-                    }
-                }],
-                yAxes: [{
-                    display: false,
-                    scaleLabel: {
-                        display: true,
-                        labelString: 'Value'
-                    }
-                }]
+                    text: clockData.title,
+                }
             }
         }
     });
