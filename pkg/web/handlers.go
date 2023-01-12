@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"bitbucket.org/grgbrn/localfm/pkg/query"
 )
@@ -166,7 +168,7 @@ func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request, templ
 		avgClockValues[ix] = val.AvgCount
 	}
 
-	unitTitle := strings.Title(params.Mode)
+	unitTitle := titleCase(params.Mode)
 
 	tmp := trackTemplateData{
 		TopTracks:  topTracks,
@@ -440,6 +442,11 @@ func (app *Application) listeningClockData(w http.ResponseWriter, r *http.Reques
 		EndDate:   params.End,
 		Clock:     clock,
 	})
+}
+
+func titleCase(s string) string {
+	c := cases.Title(language.English)
+	return c.String(s)
 }
 
 // template structs (move elsewhere?)
