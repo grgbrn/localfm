@@ -1,4 +1,11 @@
 {{define "tracks"}}
+    <!-- embed json data for clock widget -->
+    <script type="text/javascript">
+    setTimeout(function() {
+      window.refreshListeningChart({{ .ClockData }})
+    }, 0);
+    </script>
+
     <div class="mtracks">
       <table class="listview">
         <tbody>

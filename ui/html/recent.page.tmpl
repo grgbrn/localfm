@@ -1,6 +1,6 @@
 {{template "base" .}}
 
-{{define "title"}}Recent Activity{{end}}
+{{define "title"}}Recently Played Tracks{{end}}
 
 {{define "header"}}{{end}}
 
@@ -9,7 +9,7 @@
 
   <div id="monthly-pagegrid">
     <!-- prev/next links  -->
-    {{template "nextbar" .}}
+    {{template "nextbar" .PagingData}}
 
     {{template "recent" .}}
   </div>

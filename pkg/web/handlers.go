@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"bitbucket.org/grgbrn/localfm/pkg/query"
@@ -71,7 +72,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "./recent", http.StatusTemporaryRedirect)
 }
 
-func (app *Application) recentPage(w http.ResponseWriter, r *http.Request, tmpl string) {
+func (app *Application) recentPage(w http.ResponseWriter, r *http.Request, templateName string) {
 
 	offsetParams, err := extractOffsetParams(r)
 	if err != nil {
@@ -92,26 +93,21 @@ func (app *Application) recentPage(w http.ResponseWriter, r *http.Request, tmpl 
 		nextLink = fmt.Sprintf("/htmx/recentTracks?offset=%d&count=%d", offsetParams.Offset-1, offsetParams.Count)
 	}
 
-	type recentTemplateData struct {
-		Title    string
-		Previous string
-		Next     string
-
-		Tracks []query.ActivityResult
-	}
-
 	tmp := recentTemplateData{
-		Title:    "Recently Played Tracks",
-		Previous: prevLink,
-		Next:     nextLink,
+		PagingData: datebarTemplateData{
+			Title:     "Recently Played Tracks",
+			Previous:  prevLink,
+			Next:      nextLink,
+			DOMTarget: "#monthly-pagegrid",
+		},
 
 		Tracks: recentTracks,
 	}
 
-	renderTemplate(w, tmpl, tmp)
+	renderTemplate(w, templateName, tmp)
 }
 
-func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request) {
+func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request, templateName string) {
 
 	params, err := extractDateRangeParams(r)
 	if err != nil {
@@ -139,38 +135,59 @@ func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type clockTemplateData struct {
-		GraphTitle string `json:"title"`
-		AvgLabel   string `json:"label"`
-
-		CurrentValues []int `json:"currentValues"`
-		AverageValues []int `json:"avgValues"`
+	// generate next/previous links
+	var nextLink, prevLink string
+	prevLink = fmt.Sprintf("/htmx/popularTracks?offset=%d&mode=%s", params.Offset+1, params.Mode)
+	if params.Offset > 0 {
+		nextLink = fmt.Sprintf("/htmx/popularTracks?offset=%d&mode=%s", params.Offset-1, params.Mode)
 	}
 
-	clockData := clockTemplateData{
-		GraphTitle:    "XXXly listening times",
-		AvgLabel:      "6 XXX avg",
-		CurrentValues: make([]int, 24),
-		AverageValues: make([]int, 24),
+	// generate title
+	var pagingTitle string
+	switch params.Mode {
+	case "week":
+		// mimic javascript toDateString()
+		// "Thu Jan 12 2023"
+		const dateStringFormat = "Mon Jan 2 2006"
+		start := params.Start.Format(dateStringFormat)
+		end := params.End.Format(dateStringFormat)
+		pagingTitle = start + " to " + end
+	case "month":
+		pagingTitle = params.Start.Format("Jan 2006")
+	case "year":
+		pagingTitle = params.Start.Format("2006")
 	}
+
+	// listening clock current/avg values
+	currentClockValues := make([]int, 24)
+	avgClockValues := make([]int, 24)
 	for ix, val := range clock {
-		clockData.CurrentValues[ix] = val.PlayCount
-		clockData.AverageValues[ix] = val.AvgCount
+		currentClockValues[ix] = val.PlayCount
+		avgClockValues[ix] = val.AvgCount
 	}
 
-	type trackTemplateData struct {
-		TopTracks  []query.TrackResult
-		TopArtists []query.ArtistResult
-		ClockData  clockTemplateData
-	}
+	unitTitle := strings.Title(params.Mode)
 
 	tmp := trackTemplateData{
 		TopTracks:  topTracks,
 		TopArtists: topArtists,
-		ClockData:  clockData,
+		ClockData: clockTemplateData{
+			GraphTitle:    unitTitle + "ly listening times",
+			AvgLabel:      "6 " + unitTitle + " avg",
+			CurrentValues: currentClockValues,
+			AverageValues: avgClockValues,
+		},
+		PagingData: datebarTemplateData{
+			Title:        "Popular Tracks: " + pagingTitle,
+			UnitLabel:    unitTitle,
+			DOMTarget:    "#monthly-pagegrid",
+			Previous:     prevLink,
+			Next:         nextLink,
+			DateRangeURL: "/htmx/popularTracks",
+		},
 	}
 
-	renderTemplate(w, "tracks.page.tmpl", tmp)
+	renderTemplate(w, templateName, tmp)
 }
 
 func (app *Application) artistsPage(w http.ResponseWriter, r *http.Request) {
@@ -222,12 +239,13 @@ func extractDateRangeParams(r *http.Request) (query.DateRangeParams, error) {
 	// required param: offset
 	offStr := r.URL.Query().Get("offset")
 	if offStr == "" {
-		offStr = "1"
+		offStr = "0"
 	}
 	offset, err := strconv.Atoi(offStr)
 	if err != nil {
 		return params, errors.New("invalid format for parameter: offset")
 	}
+	params.Offset = offset
 
 	// optional param: tz
 	tzStr := r.URL.Query().Get("tz")
@@ -422,4 +440,40 @@ func (app *Application) listeningClockData(w http.ResponseWriter, r *http.Reques
 		EndDate:   params.End,
 		Clock:     clock,
 	})
+}
+
+// template structs (move elsewhere?)
+
+// recent.*.tmpl
+type recentTemplateData struct {
+	PagingData datebarTemplateData
+
+	Tracks []query.ActivityResult
+}
+
+// data for datebar.partial.tmpl and nextbar.partial.tmpl
+type datebarTemplateData struct {
+	Title        string
+	UnitLabel    string // XXX document this
+	DOMTarget    string
+	Previous     string
+	Next         string
+	DateRangeURL string
+}
+
+// listening clock component on tracks.page.tmpl
+type clockTemplateData struct {
+	GraphTitle string `json:"title"`
+	AvgLabel   string `json:"label"`
+
+	CurrentValues []int `json:"currentValues"`
+	AverageValues []int `json:"avgValues"`
+}
+
+// tracks.page.tmpl
+type trackTemplateData struct {
+	TopTracks  []query.TrackResult
+	TopArtists []query.ArtistResult
+	ClockData  clockTemplateData
+	PagingData datebarTemplateData
 }

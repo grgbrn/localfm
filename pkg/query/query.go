@@ -15,7 +15,9 @@ type OffsetParams struct {
 
 // DateRangeParams represents query params over a date range
 type DateRangeParams struct {
-	Mode  string
+	Mode   string
+	Offset int
+	// generated fields
 	Start time.Time
 	End   time.Time
 	Limit int

@@ -1,6 +1,6 @@
 {{template "base" .}}
 
-{{define "title"}}Recent Tracks{{end}}
+{{define "title"}}Tracks{{end}}
 
 {{define "header"}}
   <!-- chart deps -->
@@ -10,22 +10,11 @@
 {{end}}
 
 {{define "body"}}
-  <!-- embed json data for clock widget -->
-  <script type="text/javascript">
-  window.clockData = {{ .ClockData }}
-  </script>
-
   <!-- begin visible page content -->
   {{template "topnav" "tracks"}}
 
   <div id="monthly-pagegrid">
-    {{ template "datebar" .}}
+    {{ template "datebar" .PagingData}}
     {{ template "tracks" . }}
   </div>
-
-  <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', (e) => {
-      window.refreshListeningChart(window.clockData)
-    })
-  </script>
 {{end}}

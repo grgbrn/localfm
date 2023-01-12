@@ -24,7 +24,7 @@ window.refreshListeningChart = function (clockData) {
                 backgroundColor: 'rgba(0,0,255,0.6)',
                 borderColor: 'blue',
             }, {
-                label: clockData.avgLabel,
+                label: clockData.label,
                 data: clockData.avgValues,
             }]
         },

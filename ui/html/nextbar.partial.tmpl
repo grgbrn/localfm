@@ -1,19 +1,18 @@
 {{define "nextbar"}}
 <div class="datebar">
   <div class="datebar-title">
-    {{.Title}}: <span id="datebar-title-label"></span>
+    {{ .Title }}: <span id="datebar-title-label"></span>
   </div>
   <div class="datebar-controls">
     {{ if (ne .Previous "") }}
     <div>
-    <!-- XXX hx-target should be parameterized -->
-      <a id="prevlink" href="#" hx-get="{{.Previous}}" hx-target="#monthly-pagegrid" >&#8592; Previous</a>
+      <a id="prevlink" href="#" hx-get="{{.Previous}}" hx-target="{{.DOMTarget}}" >&#8592; Previous</a>
     </div>
     {{ end }}
 
     {{ if (ne .Next "") }}
     <div>
-      <a id="nextlink" href="#" hx-get="{{.Next}}" hx-target="#monthly-pagegrid" >Next &#8594;</a>
+      <a id="nextlink" href="#" hx-get="{{.Next}}" hx-target="{{.DOMTarget}}" >Next &#8594;</a>
     </div>
     {{ end }}
   </div>
