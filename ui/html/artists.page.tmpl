@@ -5,30 +5,11 @@
 {{define "header"}}{{end}}
 
 {{define "body"}}
-  <!-- templates -->
-  <template id="artist_tile_template">
-    <div class="atile">
-      <img src="">
-      <div class="txt"><em>ARTIST</em><br><span>NUM</span> plays</div>
-    </div>
-  </template>
-
   <!-- begin visible page content -->
   {{template "topnav" "artists"}}
 
   <div id="artist-pagegrid">
-    <!-- combo title / date control -->
-    {{template "datebar" "Recent Artists"}}
-
-    <div class="gallery">
-      <div>&nbsp;loading...</div>
-    </div>
+    {{ template "artists" . }}
   </div>
   <!-- end grid -->
-
-  <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', (e) => {
-      initArtistPage()
-    })
-  </script>
 {{end}}

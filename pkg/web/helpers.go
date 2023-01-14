@@ -50,6 +50,7 @@ func renderTemplate(w http.ResponseWriter, tmpl string, td interface{}) {
 		prefix + tmpl,
 		prefix + "recent.tmpl",
 		prefix + "tracks.tmpl",
+		prefix + "artists.tmpl",
 		prefix + "base.layout.tmpl",
 		prefix + "topnav.partial.tmpl",
 		prefix + "datebar.partial.tmpl",

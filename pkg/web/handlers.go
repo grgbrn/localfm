@@ -192,8 +192,64 @@ func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request, templ
 	renderTemplate(w, templateName, tmp)
 }
 
-func (app *Application) artistsPage(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, "artists.page.tmpl", nil)
+func (app *Application) artistsPage(w http.ResponseWriter, r *http.Request, templateName string) {
+
+	params, err := extractDateRangeParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	artists, err := query.TopArtists(app.db.SQL, params)
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	// generate next/previous links
+	var nextLink, prevLink string
+	prevLink = fmt.Sprintf("/htmx/artists?offset=%d&mode=%s", params.Offset+1, params.Mode)
+	if params.Offset > 0 {
+		nextLink = fmt.Sprintf("/htmx/artists?offset=%d&mode=%s", params.Offset-1, params.Mode)
+	}
+
+	// XXX factor this out, used in multiple handlers
+	// generate title
+	var pagingTitle string
+	switch params.Mode {
+	case "week":
+		// mimic javascript toDateString()
+		// "Thu Jan 12 2023"
+		const dateStringFormat = "Mon Jan 2 2006"
+		start := params.Start.Format(dateStringFormat)
+		end := params.End.Format(dateStringFormat)
+		pagingTitle = start + " to " + end
+	case "month":
+		pagingTitle = params.Start.Format("Jan 2006")
+	case "year":
+		pagingTitle = params.Start.Format("2006")
+	}
+
+	unitTitle := titleCase(params.Mode)
+
+	type artistTemplateData struct {
+		Artists    []query.ArtistResult
+		PagingData datebarTemplateData
+	}
+
+	dat := artistTemplateData{
+		Artists: artists,
+		PagingData: datebarTemplateData{
+			Title:        "Recent Artists: " + pagingTitle,
+			UnitLabel:    unitTitle,
+			DOMTarget:    "#artist-pagegrid",
+			Previous:     prevLink,
+			Next:         nextLink,
+			DateRangeURL: "/htmx/artists",
+		},
+	}
+
+	renderTemplate(w, templateName, dat)
 }
 
 func extractOffsetParams(r *http.Request) (query.OffsetParams, error) {

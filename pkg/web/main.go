@@ -68,7 +68,9 @@ func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Ap
 	mux.Handle("/tracks", protectedMiddleware.ThenFunc(func(w http.ResponseWriter, r *http.Request) {
 		app.tracksPage(w, r, "tracks.page.tmpl")
 	}))
-	mux.Handle("/artists", protectedMiddleware.ThenFunc(app.artistsPage))
+	mux.Handle("/artists", protectedMiddleware.ThenFunc(func(w http.ResponseWriter, r *http.Request) {
+		app.artistsPage(w, r, "artists.page.tmpl")
+	}))
 
 	// htmx calls
 	mux.Handle("/htmx/recentTracks", dataMiddleware.ThenFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +80,7 @@ func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Ap
 		app.tracksPage(w, r, "tracks.tile.tmpl")
 	}))
 	mux.Handle("/htmx/artists", dataMiddleware.ThenFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "XXX not yet implemented", http.StatusBadRequest)
+		app.artistsPage(w, r, "artists.tile.tmpl")
 	}))
 
 	// data calls
