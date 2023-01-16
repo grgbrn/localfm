@@ -29,6 +29,7 @@ func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 		// retrieve field values
 		email := r.PostForm.Get("email")
 		passwd := r.PostForm.Get("password")
+		tz := r.PostForm.Get("tz")
 
 		userID, err := authenticateUser(email, passwd)
 		if err != nil {
@@ -43,6 +44,7 @@ func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		app.session.Put(r, "authenticatedUserID", userID)
+		app.session.Put(r, "timezone", tz)
 
 		// redirect to splash page
 		// XXX but we should remember what the user was trying
@@ -88,6 +90,19 @@ func (app *Application) recentPage(w http.ResponseWriter, r *http.Request, templ
 		return
 	}
 
+	// not sure this is the best way to handle this, but convert timezone to client localtime
+	tz := app.session.GetString(r, "timezone")
+	if tz != "" {
+		localTZ, err := time.LoadLocation(tz)
+		if err != nil {
+			app.serverError(w, err)
+			return
+		}
+		for ix, activityResult := range recentTracks {
+			recentTracks[ix].Time = activityResult.Time.In(localTZ)
+		}
+	}
+
 	// figure out previous/next links
 	var nextLink, prevLink string
 	prevLink = fmt.Sprintf("/htmx/recentTracks?offset=%d&count=%d", offsetParams.Offset+1, offsetParams.Count)
@@ -111,7 +126,7 @@ func (app *Application) recentPage(w http.ResponseWriter, r *http.Request, templ
 
 func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request, templateName string) {
 
-	params, err := extractDateRangeParams(r)
+	params, err := app.extractDateRangeParams(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -194,7 +209,7 @@ func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request, templ
 
 func (app *Application) artistsPage(w http.ResponseWriter, r *http.Request, templateName string) {
 
-	params, err := extractDateRangeParams(r)
+	params, err := app.extractDateRangeParams(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -283,7 +298,7 @@ func extractOffsetParams(r *http.Request) (query.OffsetParams, error) {
 // extractDateRangeParams translates mode=X&offset=Y parameters
 // from the URL query into start/end/lim parameters expected by
 // the query package
-func extractDateRangeParams(r *http.Request) (query.DateRangeParams, error) {
+func (app *Application) extractDateRangeParams(r *http.Request) (query.DateRangeParams, error) {
 
 	var params query.DateRangeParams
 
@@ -306,7 +321,12 @@ func extractDateRangeParams(r *http.Request) (query.DateRangeParams, error) {
 	params.Offset = offset
 
 	// optional param: tz
+	// if unset, try the value in the session
+	// otherwise default to UTC
 	tzStr := r.URL.Query().Get("tz")
+	if tzStr == "" {
+		tzStr = app.session.GetString(r, "timezone")
+	}
 	if tzStr != "" {
 		loc, err := time.LoadLocation(tzStr)
 		if err != nil {
@@ -361,7 +381,7 @@ func (app *Application) topArtistsData(w http.ResponseWriter, r *http.Request) {
 		Artists   []query.ArtistResult `json:"artists"`
 	}
 
-	params, err := extractDateRangeParams(r)
+	params, err := app.extractDateRangeParams(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -391,7 +411,7 @@ func (app *Application) topNewArtistsData(w http.ResponseWriter, r *http.Request
 		Artists   []query.ArtistResult `json:"artists"`
 	}
 
-	params, err := extractDateRangeParams(r)
+	params, err := app.extractDateRangeParams(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -420,7 +440,7 @@ func (app *Application) topTracksData(w http.ResponseWriter, r *http.Request) {
 		Tracks    []query.TrackResult `json:"tracks"`
 	}
 
-	params, err := extractDateRangeParams(r)
+	params, err := app.extractDateRangeParams(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -480,7 +500,7 @@ func (app *Application) listeningClockData(w http.ResponseWriter, r *http.Reques
 		Clock     []query.ClockResult `json:"clock"`
 	}
 
-	params, err := extractDateRangeParams(r)
+	params, err := app.extractDateRangeParams(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

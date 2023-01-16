@@ -109,6 +109,7 @@
 <body>
     <div class="main">
         <form action='/login' method='POST' novalidate>
+            <input id="tzfield" type='hidden' name='tz' value=''>
             {{with .Error}}
             <div class='error'>{{.}}</div>
             {{end}}
@@ -126,6 +127,16 @@
             </div>
         </form>
     </div>
+    <script type="text/javascript">
+        let form = document.querySelector("form")
+        form.addEventListener("submit", (event) => {
+            try {
+                let tzname = Intl.DateTimeFormat().resolvedOptions().timeZone
+                let tzField = document.getElementById("tzfield")
+                tzField.value = tzname
+            } catch (error) { }
+        });
+    </script>
 </body>
 
 </html>
