@@ -3,7 +3,7 @@
       <table class="listview">
 
         {{if .Tracks}}
-          {{ $headerDate := (index .Tracks 0).Time.Format "Mon Jan 2 2006" }}
+          {{ $headerDate := dateLabel (index .Tracks 0).Time }}
           <tr>
             <td class="listtitle" colspan="3">{{ $headerDate }}</td>
           </tr>
@@ -11,8 +11,8 @@
           {{range .Tracks}}
 
           <!-- maybe needs a new date separator -->
-          {{ if (ne (.Time.Format "Mon Jan 2 2006") $headerDate) }}
-            {{ $headerDate = .Time.Format "Mon Jan 2 2006" }}
+          {{ if (ne (dateLabel .Time ) $headerDate) }}
+            {{ $headerDate = dateLabel .Time }}
             <tr>
               <td class="listtitle" colspan="3">{{ $headerDate }}</td>
             </tr>
@@ -21,7 +21,7 @@
           <tr>
             <td><img class="coverimg" src="{{ index .ImageURLs 0}}" alt=""></td>
             <td><em>{{.Title}}</em><br><span>{{.Artist}}</span></td>
-            <td title="{{.Time}}">{{.Time.Format "3:04PM" }}</td>
+            <td title="{{.Time.Format "Mon, 02 Jan 2006 15:04:05 MST"}}">{{ prettyTime .Time }}</td>
           </tr>
           {{end}}
 
