@@ -1,12 +1,15 @@
-{{define "artists"}}
-    {{template "datebar" .PagingData}}
+{{template "base" .}}
 
-    <div class="gallery">
-        {{ range .Artists }}
-        <div class="atile">
-            <img src="{{ index .ImageURLs 0}}">
-            <div class="txt"><em>{{.Name}}</em><br><span>{{.PlayCount}}</span> plays</div>
-        </div>
-        {{ end }}
-    </div>
+{{define "title"}}Artists{{end}}
+
+{{define "header"}}{{end}}
+
+{{define "body"}}
+  <!-- begin visible page content -->
+  {{template "topnav" "artists"}}
+
+  <div id="artist-pagegrid">
+    {{ template "artists" . }}
+  </div>
+  <!-- end grid -->
 {{end}}

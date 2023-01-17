@@ -1,0 +1,35 @@
+{{define "recent"}}
+    <div class="mtracks">
+      <table class="listview">
+
+        {{if .Tracks}}
+          {{ $headerDate := dateLabel (index .Tracks 0).Time }}
+          <tr>
+            <td class="listtitle" colspan="3">{{ $headerDate }}</td>
+          </tr>
+
+          {{range .Tracks}}
+
+          <!-- maybe needs a new date separator -->
+          {{ if (ne (dateLabel .Time ) $headerDate) }}
+            {{ $headerDate = dateLabel .Time }}
+            <tr>
+              <td class="listtitle" colspan="3">{{ $headerDate }}</td>
+            </tr>
+          {{ end }}
+
+          <tr>
+            <td><img class="coverimg" src="{{ index .ImageURLs 0}}" alt=""></td>
+            <td><em>{{.Title}}</em><br><span>{{.Artist}}</span></td>
+            <td title="{{.Time.Format "Mon, 02 Jan 2006 15:04:05 MST"}}">{{ prettyTime .Time }}</td>
+          </tr>
+          {{end}}
+
+        {{else}}
+        <tr><td>nothing to see here!</td></tr>
+        {{end}}
+
+      </table>
+    </div>
+  </div>
+{{end}}

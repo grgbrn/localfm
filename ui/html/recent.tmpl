@@ -1,35 +1,16 @@
-{{define "recent"}}
-    <div class="mtracks">
-      <table class="listview">
+{{template "base" .}}
 
-        {{if .Tracks}}
-          {{ $headerDate := dateLabel (index .Tracks 0).Time }}
-          <tr>
-            <td class="listtitle" colspan="3">{{ $headerDate }}</td>
-          </tr>
+{{define "title"}}Recently Played Tracks{{end}}
 
-          {{range .Tracks}}
+{{define "header"}}{{end}}
 
-          <!-- maybe needs a new date separator -->
-          {{ if (ne (dateLabel .Time ) $headerDate) }}
-            {{ $headerDate = dateLabel .Time }}
-            <tr>
-              <td class="listtitle" colspan="3">{{ $headerDate }}</td>
-            </tr>
-          {{ end }}
+{{define "body"}}
+  {{template "topnav" "recent"}}
 
-          <tr>
-            <td><img class="coverimg" src="{{ index .ImageURLs 0}}" alt=""></td>
-            <td><em>{{.Title}}</em><br><span>{{.Artist}}</span></td>
-            <td title="{{.Time.Format "Mon, 02 Jan 2006 15:04:05 MST"}}">{{ prettyTime .Time }}</td>
-          </tr>
-          {{end}}
+  <div id="monthly-pagegrid">
+    <!-- prev/next links  -->
+    {{template "nextbar" .PagingData}}
 
-        {{else}}
-        <tr><td>nothing to see here!</td></tr>
-        {{end}}
-
-      </table>
-    </div>
+    {{template "recent" .}}
   </div>
 {{end}}

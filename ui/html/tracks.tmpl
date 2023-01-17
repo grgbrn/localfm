@@ -1,51 +1,19 @@
-{{define "tracks"}}
-    <!-- embed json data for clock widget -->
-    <script type="text/javascript">
-    setTimeout(function() {
-      window.refreshListeningChart({{ .ClockData }})
-    }, 0);
-    </script>
+{{template "base" .}}
 
-    <div class="mtracks">
-      <table class="listview">
-        <tbody>
-        <!-- TODO: what about empty TopTracks -->
-        {{ range .TopTracks }}
-          <tr>
-            <td>{{.Rank}}</td>
-            <td><img class="coverimg" src="{{ index .ImageURLs 0}}" alt=""></td>
-            <td><em>{{.Title}}</em><br><span>{{.Artist}}</span></td>
-            <td>{{.PlayCount}}</td>
-          </tr>
-        {{ end }}
-        </tbody>
-      </table>
-    </div>
+{{define "title"}}Tracks{{end}}
 
-    <!-- sidebar container with multiple sub-tiles -->
-    <div class="sidebar-container">
-      <!-- chart tile (kind of ugly) -->
-      <div class="chartcontainer">
-        <canvas id="myChart"></canvas>
-      </div>
+{{define "header"}}
+  <!-- chart deps -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js" integrity="sha512-ElRFoEQdI5Ht6kZvyzXhYG9NqjtkmlkfYk0wr6wHxU9JEHakS7UJZNeml5ALk+8IKlU6jDgMabC3vkumRokgJA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="static/js/chart.js"></script>
+{{end}}
 
-      <!-- new artists tile -->
-      <div class="newartists">
-        <h3>New Artists</h3>
-        <table class="tinylist">
-          <tbody>
-          {{ if .TopArtists }}
-            {{ range .TopArtists }}
-              <tr>
-                <td><img class="avatar" src="{{ index .ImageURLs 0}}" alt=""></td>
-                <td><em>{{ .Name }}</em><br><span>{{ .PlayCount }}</span> tracks</td>
-              </tr>
-            {{ end }}
-          {{ else }}
-            <tr><td>No new artists</td></tr>
-          {{ end }}
-          </tbody>
-        </table>
-      </div>
-    </div>
-{{ end }}
+{{define "body"}}
+  <!-- begin visible page content -->
+  {{template "topnav" "tracks"}}
+
+  <div id="monthly-pagegrid">
+    {{ template "datebar" .PagingData}}
+    {{ template "tracks" . }}
+  </div>
+{{end}}

@@ -16,7 +16,7 @@ import (
 // login pages
 func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		renderTemplate(w, "login.page.tmpl", &templateData{})
+		app.renderTemplate(w, "login.tmpl", &errorTemplateData{})
 	} else if r.Method == "POST" {
 		err := r.ParseForm()
 		if err != nil {
@@ -38,7 +38,7 @@ func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if userID == -1 {
-			renderTemplate(w, "login.page.tmpl", &templateData{
+			app.renderTemplate(w, "login.tmpl", &errorTemplateData{
 				Error: "Email or Password is incorrect",
 			})
 			return
@@ -121,7 +121,7 @@ func (app *Application) recentPage(w http.ResponseWriter, r *http.Request, templ
 		Tracks: recentTracks,
 	}
 
-	renderTemplate(w, templateName, tmp)
+	app.renderTemplate(w, templateName, tmp)
 }
 
 func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request, templateName string) {
@@ -204,7 +204,7 @@ func (app *Application) tracksPage(w http.ResponseWriter, r *http.Request, templ
 		},
 	}
 
-	renderTemplate(w, templateName, tmp)
+	app.renderTemplate(w, templateName, tmp)
 }
 
 func (app *Application) artistsPage(w http.ResponseWriter, r *http.Request, templateName string) {
@@ -264,7 +264,7 @@ func (app *Application) artistsPage(w http.ResponseWriter, r *http.Request, temp
 		},
 	}
 
-	renderTemplate(w, templateName, dat)
+	app.renderTemplate(w, templateName, dat)
 }
 
 func extractOffsetParams(r *http.Request) (query.OffsetParams, error) {

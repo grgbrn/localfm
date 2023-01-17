@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -19,28 +20,35 @@ import (
 )
 
 type Application struct {
-	db      *m.Database
-	err     *log.Logger
-	info    *log.Logger
-	session *sessions.Session
-	Mux     http.Handler
+	db            *m.Database
+	err           *log.Logger
+	info          *log.Logger
+	session       *sessions.Session
+	Mux           http.Handler
+	templateCache map[string]*template.Template
 
 	updateChan chan bool
 }
 
-func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Application, error) {
+func CreateApp(db *m.Database, sessionSecret string, info, errorLog *log.Logger) (*Application, error) {
 
 	session := sessions.New([]byte(sessionSecret))
 	session.Lifetime = 24 * 7 * time.Hour
+
+	templateCache, err := newTemplateCache()
+	if err != nil {
+		return nil, err
+	}
 
 	//
 	// Initialize a new instance of application containing the dependencies.
 	//
 	app := &Application{
-		db:      db,
-		info:    info,
-		err:     err,
-		session: session,
+		db:            db,
+		info:          info,
+		err:           errorLog,
+		session:       session,
+		templateCache: templateCache,
 	}
 
 	//
@@ -63,24 +71,24 @@ func CreateApp(db *m.Database, sessionSecret string, info, err *log.Logger) (*Ap
 	// app pages
 	mux.Handle("/", protectedMiddleware.ThenFunc(index))
 	mux.Handle("/recent", protectedMiddleware.ThenFunc(func(w http.ResponseWriter, r *http.Request) {
-		app.recentPage(w, r, "recent.page.tmpl")
+		app.recentPage(w, r, "recent.tmpl")
 	}))
 	mux.Handle("/tracks", protectedMiddleware.ThenFunc(func(w http.ResponseWriter, r *http.Request) {
-		app.tracksPage(w, r, "tracks.page.tmpl")
+		app.tracksPage(w, r, "tracks.tmpl")
 	}))
 	mux.Handle("/artists", protectedMiddleware.ThenFunc(func(w http.ResponseWriter, r *http.Request) {
-		app.artistsPage(w, r, "artists.page.tmpl")
+		app.artistsPage(w, r, "artists.tmpl")
 	}))
 
 	// htmx calls
 	mux.Handle("/htmx/recentTracks", dataMiddleware.ThenFunc(func(w http.ResponseWriter, r *http.Request) {
-		app.recentPage(w, r, "recent.tile.tmpl")
+		app.recentPage(w, r, "recent-fragment.tmpl")
 	}))
 	mux.Handle("/htmx/popularTracks", dataMiddleware.ThenFunc(func(w http.ResponseWriter, r *http.Request) {
-		app.tracksPage(w, r, "tracks.tile.tmpl")
+		app.tracksPage(w, r, "tracks-fragment.tmpl")
 	}))
 	mux.Handle("/htmx/artists", dataMiddleware.ThenFunc(func(w http.ResponseWriter, r *http.Request) {
-		app.artistsPage(w, r, "artists.tile.tmpl")
+		app.artistsPage(w, r, "artists-fragment.tmpl")
 	}))
 
 	// data calls
