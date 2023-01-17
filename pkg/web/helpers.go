@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -71,11 +72,16 @@ func renderTemplate(w http.ResponseWriter, tmpl string, td interface{}) {
 		return
 	}
 
-	err = ts.Execute(w, td)
+	buf := new(bytes.Buffer)
+
+	err = ts.ExecuteTemplate(buf, tmpl, td)
 	if err != nil {
 		log.Println(err.Error())
 		http.Error(w, "Internal Server Error", 500)
 	}
+
+	w.WriteHeader(http.StatusOK)
+	buf.WriteTo(w)
 }
 
 func renderJSON(w http.ResponseWriter, status int, payload interface{}) {
