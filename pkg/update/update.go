@@ -27,7 +27,7 @@ func CreateFetcher(db *m.Database, logger *log.Logger, creds LastFMCredentials) 
 
 	return &Fetcher{
 		db:     db,
-		log: 	logger,
+		log:    logger,
 		creds:  creds,
 		lastfm: api,
 	}
@@ -44,7 +44,6 @@ type LastFMCredentials struct {
 type FetchOptions struct {
 	APIThrottleDelay int
 	RequestLimit     int
-	CheckDuplicates  bool
 }
 
 // FetchResults contains a summary of a fetch operation

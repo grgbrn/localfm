@@ -15,6 +15,8 @@ import (
 	"bitbucket.org/grgbrn/localfm/pkg/web"
 )
 
+// main entry point for the webapp
+// can optionally run the update in-process in a goroutine
 func main() {
 	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
 	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
@@ -61,19 +63,35 @@ func main() {
 			panic(fmt.Sprintf("Error parsing UPDATE_FREQUENCY_MINUTES as an int: %s", updateFreq))
 		}
 		updateFreq := time.Duration(i) * time.Minute
-
-		// create a log directory if it doesn't exist
-		var updateLogDir = util.GetEnvStr("UPDATE_LOGIDR", "/tmp/updatelogs")
-		err = os.MkdirAll(updateLogDir, 0755)
-		if err != nil {
-			panic(err)
-		}
+		ticker := time.NewTicker(updateFreq)
 
 		// start goroutine to kick off periodic updates of lastfm data
-		go app.PeriodicUpdate(
-			updateFreq,
-			updateLogDir,
-			lastfmCreds)
+		go func() {
+			infoLog.Printf("Starting periodic updates every %v\n", updateFreq)
+
+			for {
+				// wait for the next tick to run
+				<-ticker.C
+
+				infoLog.Println("Doing periodic update")
+
+				fetcher := update.CreateFetcher(db, infoLog, lastfmCreds)
+
+				res, err := fetcher.FetchLatestScrobbles(
+					update.FetchOptions{
+						APIThrottleDelay: 5,  // XXX
+						RequestLimit:     10, // XXX
+					},
+				)
+				if err != nil {
+					infoLog.Println("Update failed")
+					infoLog.Println(err)
+				}
+				infoLog.Println("Update succeeded")
+				infoLog.Printf("%+v\n", res)
+			}
+
+		}()
 	}
 
 	// create & run the webserver on the main goroutine

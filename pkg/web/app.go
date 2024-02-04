@@ -1,18 +1,14 @@
 package web
 
 import (
-	"errors"
-	"fmt"
 	"html/template"
 	"log"
 	"net/http"
-	"os"
 	"path"
 	"strings"
 	"time"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
-	"bitbucket.org/grgbrn/localfm/pkg/update"
 	"bitbucket.org/grgbrn/localfm/pkg/util"
 
 	"github.com/golangcollege/sessions"
@@ -26,8 +22,6 @@ type Application struct {
 	session       *sessions.Session
 	Mux           http.Handler
 	templateCache map[string]*template.Template
-
-	updateChan chan bool
 }
 
 func CreateApp(db *m.Database, sessionSecret string, info, errorLog *log.Logger) (*Application, error) {
@@ -110,81 +104,4 @@ func CreateApp(db *m.Database, sessionSecret string, info, errorLog *log.Logger)
 	app.Mux = standardMiddleware.Then(mux)
 
 	return app, nil
-}
-
-const maxUpdateFrequencyMinutes float64 = 5
-
-// PeriodicUpdate is intended to be called in a long-running goroutine that
-// will occasionally call update to fetch new data from lastfm
-func (app *Application) PeriodicUpdate(updateFreq time.Duration, baseLogDir string, credentials update.LastFMCredentials) error {
-	if app.updateChan != nil {
-		return errors.New("PeriodicUpdate can only be started once")
-	}
-	app.updateChan = make(chan bool)
-
-	// goroutine that ticks every N minutes (replaces cron)
-	go func() {
-		ticker := time.NewTicker(updateFreq)
-		for {
-			<-ticker.C
-			app.info.Println("Starting periodic update")
-			app.updateChan <- true
-		}
-	}()
-	app.info.Printf("Starting periodic updates every %v\n", updateFreq)
-
-	var lastRun time.Time
-
-	for {
-		// wait for someone to post to the update channel
-		<-app.updateChan
-
-		// simple throttle
-		if !lastRun.IsZero() && time.Since(lastRun).Minutes() < maxUpdateFrequencyMinutes {
-			app.info.Printf("Ignoring update request, most recent was only %f minutes ago (%f minimum)\n",
-				time.Since(lastRun).Minutes(), maxUpdateFrequencyMinutes)
-			continue
-		}
-
-		app.doUpdate(baseLogDir, credentials) // don't do anyting special on error
-		lastRun = time.Now()
-	}
-}
-
-func (app *Application) doUpdate(baseLogDir string, credentials update.LastFMCredentials) error {
-
-	// create a datestamped logfile in our logdir for this update
-	// 2019/11/03 16:05:44  ->  20191103_160544
-	dateSegment := time.Now().Format("20060102_150405")
-	logPath := path.Join(baseLogDir, fmt.Sprintf("%s.log", dateSegment))
-
-	app.info.Printf("Logging to %s\n", logPath)
-
-	f, err := os.Create(logPath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	logger := log.New(f, "", log.Ldate|log.Ltime)
-
-	fetcher := update.CreateFetcher(app.db, logger, credentials)
-
-	res, err := fetcher.FetchLatestScrobbles(
-		update.FetchOptions{
-			APIThrottleDelay: 5, // XXX
-			RequestLimit:     0, // XXX
-			CheckDuplicates:  false,
-		},
-	)
-	if err != nil {
-		app.info.Println("Update failed")
-		app.info.Println(err)
-		return err
-	}
-	app.info.Println("Update succeeded")
-	app.info.Printf("%+v\n", res)
-
-	// this will need to be able to return some kind of meaningful client info!
-	return nil
 }
