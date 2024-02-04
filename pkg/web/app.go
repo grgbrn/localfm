@@ -9,7 +9,6 @@ import (
 	"time"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
-	"bitbucket.org/grgbrn/localfm/pkg/util"
 
 	"github.com/golangcollege/sessions"
 	"github.com/justinas/alice"
@@ -24,7 +23,7 @@ type Application struct {
 	templateCache map[string]*template.Template
 }
 
-func CreateApp(db *m.Database, sessionSecret string, info, errorLog *log.Logger) (*Application, error) {
+func CreateApp(db *m.Database, staticFileRoot string, sessionSecret string, info, errorLog *log.Logger) (*Application, error) {
 
 	session := sessions.New([]byte(sessionSecret))
 	session.Lifetime = 24 * 7 * time.Hour
@@ -93,8 +92,7 @@ func CreateApp(db *m.Database, sessionSecret string, info, errorLog *log.Logger)
 	mux.Handle("/data/recentTracks", dataMiddleware.ThenFunc(app.recentTracksData))
 
 	// set up static file server to ignore /ui/static/ prefix
-	fileRoot := util.GetEnvStr("STATIC_FILE_ROOT", ".")
-	prefix := path.Join(fileRoot, "ui/static/")
+	prefix := path.Join(staticFileRoot, "ui/static/")
 	if !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}

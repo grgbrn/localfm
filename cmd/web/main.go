@@ -43,8 +43,10 @@ func main() {
 		panic("SESSION_SECRET must contain 32 bytes")
 	}
 
+	fileRoot := util.GetEnvStr("STATIC_FILE_ROOT", ".")
+
 	// create webapp
-	app, err := web.CreateApp(db, sessionSecret, infoLog, errorLog)
+	app, err := web.CreateApp(db, fileRoot, sessionSecret, infoLog, errorLog)
 	if err != nil {
 		panic(err)
 	}
