@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	"bitbucket.org/grgbrn/localfm/pkg/model"
 	"bitbucket.org/grgbrn/localfm/pkg/update"
@@ -50,19 +52,29 @@ func main() {
 		APIKey:    util.MustGetEnvStr("LASTFM_API_KEY"),
 		APISecret: util.MustGetEnvStr("LASTFM_API_SECRET"),
 		Username:  util.MustGetEnvStr("LASTFM_USERNAME"),
-
 	}
 
-	// start goroutine to kick off periodic updates of lastfm data
-	var updateLogDir = util.GetEnvStr("UPDATE_LOGIDR", "/tmp/updatelogs")
-	err = os.MkdirAll(updateLogDir, 0755)
-	if err != nil {
-		panic(err)
+	updateFreq := os.Getenv("UPDATE_FREQUENCY_MINUTES")
+	if updateFreq != "" {
+		i, err := strconv.Atoi(updateFreq)
+		if err != nil {
+			panic(fmt.Sprintf("Error parsing UPDATE_FREQUENCY_MINUTES as an int: %s", updateFreq))
+		}
+		updateFreq := time.Duration(i) * time.Minute
+
+		// create a log directory if it doesn't exist
+		var updateLogDir = util.GetEnvStr("UPDATE_LOGIDR", "/tmp/updatelogs")
+		err = os.MkdirAll(updateLogDir, 0755)
+		if err != nil {
+			panic(err)
+		}
+
+		// start goroutine to kick off periodic updates of lastfm data
+		go app.PeriodicUpdate(
+			updateFreq,
+			updateLogDir,
+			lastfmCreds)
 	}
-	go app.PeriodicUpdate(
-		util.GetEnvInt("UPDATE_FREQUENCY_MINUTES", 60),
-		updateLogDir,
-		lastfmCreds)
 
 	// create & run the webserver on the main goroutine
 	addr := fmt.Sprintf(":%d", util.GetEnvInt("HTTP_PORT", 4000))

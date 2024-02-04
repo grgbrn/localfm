@@ -116,7 +116,7 @@ const maxUpdateFrequencyMinutes float64 = 5
 
 // PeriodicUpdate is intended to be called in a long-running goroutine that
 // will occasionally call update to fetch new data from lastfm
-func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, credentials update.LastFMCredentials) error {
+func (app *Application) PeriodicUpdate(updateFreq time.Duration, baseLogDir string, credentials update.LastFMCredentials) error {
 	if app.updateChan != nil {
 		return errors.New("PeriodicUpdate can only be started once")
 	}
@@ -124,14 +124,14 @@ func (app *Application) PeriodicUpdate(updateFreq int, baseLogDir string, creden
 
 	// goroutine that ticks every N minutes (replaces cron)
 	go func() {
-		ticker := time.NewTicker(time.Duration(updateFreq) * time.Minute)
+		ticker := time.NewTicker(updateFreq)
 		for {
 			<-ticker.C
 			app.info.Println("Starting periodic update")
 			app.updateChan <- true
 		}
 	}()
-	app.info.Printf("Starting periodic updates every %d min\n", updateFreq)
+	app.info.Printf("Starting periodic updates every %v\n", updateFreq)
 
 	var lastRun time.Time
 
