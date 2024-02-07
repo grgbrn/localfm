@@ -21,6 +21,11 @@ func main() {
 	flag.Parse()
 
 	//
+	// create logger
+	//
+	log := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+
+	//
 	// database init
 	//
 	DSN := os.Getenv("DSN")
@@ -31,6 +36,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	log.Printf("Opened database at %s\n", db.Path)
 
 	//
 	// load lastfm credentials
@@ -42,11 +48,6 @@ func main() {
 	if APIKey == "" || APISecret == "" || Username == "" {
 		panic("Must set LASTFM_USERNAME, LASTFM_API_KEY and LASTFM_API_SECRET environment vars")
 	}
-
-	//
-	// create logger
-	//
-	log := log.New(os.Stdout, "", log.Ldate|log.Ltime)
 
 	fetcher := update.CreateFetcher(db,
 		log,

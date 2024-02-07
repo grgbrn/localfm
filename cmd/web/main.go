@@ -26,6 +26,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	infoLog.Printf("Opened database at %s\n", db.Path)
 
 	// init session store
 	sessionSecret := os.Getenv("SESSION_SECRET")
