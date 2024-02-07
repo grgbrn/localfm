@@ -102,7 +102,7 @@ func main() {
 	}
 
 	// create & run the webserver on the main goroutine
-	addr := fmt.Sprintf(":%d", util.GetEnvInt("HTTP_PORT", 4000))
+	addr := fmt.Sprintf(":%d", util.GetEnvInt("PORT", 4000))
 	srv := &http.Server{
 		Addr:     addr,
 		ErrorLog: errorLog,
