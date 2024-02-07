@@ -67,6 +67,10 @@ func main() {
 		updateFreq := time.Duration(i) * time.Minute
 		ticker := time.NewTicker(updateFreq)
 
+		// fetch options can be overriden from environment
+		throttleDelay := time.Duration(util.GetEnvInt("API_THROTTLE_DELAY", 5)) * time.Second
+		requestLimit := util.GetEnvInt("API_REQUEST_LIMIT", 0)
+
 		// start goroutine to kick off periodic updates of lastfm data
 		go func() {
 			infoLog.Printf("Starting periodic updates every %v\n", updateFreq)
@@ -81,8 +85,8 @@ func main() {
 
 				res, err := fetcher.FetchLatestScrobbles(
 					update.FetchOptions{
-						APIThrottleDelay: 5,  // XXX
-						RequestLimit:     10, // XXX
+						APIThrottleDelay: throttleDelay,
+						RequestLimit:     requestLimit,
 					},
 				)
 				if err != nil {

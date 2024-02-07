@@ -41,9 +41,10 @@ type LastFMCredentials struct {
 }
 
 // FetchOptions is all possible flags to pass to FetchLatestScrobbles
+// XXX this struct seems a little unnecessary. functional options?
 type FetchOptions struct {
-	APIThrottleDelay int
-	RequestLimit     int
+	APIThrottleDelay time.Duration
+	RequestLimit     int // XXX only really ever used for testing
 }
 
 // FetchResults contains a summary of a fetch operation
@@ -81,7 +82,7 @@ func (this *Fetcher) FetchLatestScrobbles(opts FetchOptions) (FetchResults, erro
 
 	// XXX maybe clean up old ticker if it still exists? otherwise the fetcher is
 	// single-shot
-	this.throttle = time.Tick(time.Duration(opts.APIThrottleDelay) * time.Second)
+	this.throttle = time.Tick(opts.APIThrottleDelay)
 
 	/*
 		three choices for start state:

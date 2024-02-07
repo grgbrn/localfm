@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	m "bitbucket.org/grgbrn/localfm/pkg/model"
 	"bitbucket.org/grgbrn/localfm/pkg/update"
@@ -56,9 +57,11 @@ func main() {
 		},
 	)
 
+	delay := time.Duration(*delayPtr) * time.Second
+
 	res, err := fetcher.FetchLatestScrobbles(
 		update.FetchOptions{
-			APIThrottleDelay: *delayPtr,
+			APIThrottleDelay: delay,
 			RequestLimit:     *limitPtr,
 		},
 	)
